@@ -1033,6 +1033,136 @@ class SettingsPage(QWidget):
             QMessageBox.information(self, "Guardado", "Ajustes guardados.")
 
 
+class InsightsPage(QWidget):
+    """Usage analytics — total words, WPM, streak, per-app breakdown, activity."""
+
+    def __init__(self, db: TranscriptionDB):
+        super().__init__()
+        self.db = db
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(28, 22, 28, 16)
+        outer.setSpacing(16)
+        title = QLabel("Insights")
+        title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
+        outer.addWidget(title)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self._body_host = QWidget()
+        self.body = QVBoxLayout(self._body_host)
+        self.body.setContentsMargins(0, 0, 8, 0)
+        self.body.setSpacing(16)
+        self.body.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._scroll.setWidget(self._body_host)
+        outer.addWidget(self._scroll, 1)
+
+    @staticmethod
+    def _clear(layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+            elif item.layout() is not None:
+                InsightsPage._clear(item.layout())
+
+    def _stat_card(self, value: str, label: str) -> QFrame:
+        card = QFrame()
+        card.setStyleSheet(f"QFrame {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(16, 14, 16, 14)
+        cl.setSpacing(4)
+        v = QLabel(value)
+        v.setStyleSheet(f"color: {C.TEXT}; font-size: 26px; font-weight: 700;")
+        lb = QLabel(label)
+        lb.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
+        cl.addWidget(v)
+        cl.addWidget(lb)
+        return card
+
+    def _section(self, name: str) -> QVBoxLayout:
+        box = QFrame()
+        box.setStyleSheet(f"QFrame {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
+        inner = QVBoxLayout(box)
+        inner.setContentsMargins(16, 14, 16, 14)
+        inner.setSpacing(10)
+        header = QLabel(name)
+        header.setStyleSheet(f"color: {C.TEXT}; font-size: 14px; font-weight: 600; border: none;")
+        inner.addWidget(header)
+        self.body.addWidget(box)
+        return inner
+
+    def reload(self):
+        self._clear(self.body)
+        d = self.db.insights()
+
+        cards = QHBoxLayout()
+        cards.setSpacing(12)
+        cards.addWidget(self._stat_card(f"{d['words']:,}", "Palabras totales"))
+        cards.addWidget(self._stat_card(f"{round(d['wpm'])}", "Palabras / minuto"))
+        cards.addWidget(self._stat_card(f"{d['count']:,}", "Dictados"))
+        cards.addWidget(self._stat_card(f"{d['streak']}", "Racha (días)"))
+        self.body.addLayout(cards)
+
+        # Per-app usage bars
+        sec = self._section("Uso por app")
+        per_app = d["per_app"]
+        if not per_app:
+            empty = QLabel("Aún no hay dictados. Dicta algo con Ctrl+Alt.")
+            empty.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; border: none;")
+            sec.addWidget(empty)
+        else:
+            maxn = max(a["n"] for a in per_app) or 1
+            for a in per_app:
+                row = QHBoxLayout()
+                row.setSpacing(10)
+                name = QLabel(a["app"])
+                name.setFixedWidth(150)
+                name.setStyleSheet(f"color: {C.TEXT}; font-size: 12px; border: none;")
+                row.addWidget(name)
+                track = QFrame()
+                track.setFixedHeight(10)
+                track.setStyleSheet(f"background: {C.BG_INPUT}; border-radius: 5px;")
+                tl = QHBoxLayout(track)
+                tl.setContentsMargins(0, 0, 0, 0)
+                fill = QFrame()
+                fill.setStyleSheet(f"background: {C.ACCENT}; border-radius: 5px;")
+                tl.addWidget(fill, max(1, round(100 * a["n"] / maxn)))
+                spacer = QFrame()
+                spacer.setStyleSheet("background: transparent;")
+                tl.addWidget(spacer, max(0, 100 - round(100 * a["n"] / maxn)))
+                row.addWidget(track, 1)
+                cnt = QLabel(str(a["n"]))
+                cnt.setFixedWidth(40)
+                cnt.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; border: none;")
+                cnt.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                row.addWidget(cnt)
+                sec.addLayout(row)
+
+        # Activity strip — last 21 days
+        act = self._section("Actividad (últimos 21 días)")
+        strip = QHBoxLayout()
+        strip.setSpacing(4)
+        per_day = d["per_day"]
+        from datetime import date, timedelta
+        today = date.today()
+        vals = [per_day.get((today - timedelta(days=i)).isoformat(), 0) for i in range(20, -1, -1)]
+        mx = max(vals) or 1
+        for n in vals:
+            sq = QFrame()
+            sq.setFixedSize(13, 13)
+            if n == 0:
+                sq.setStyleSheet(f"background: {C.BG_INPUT}; border-radius: 3px;")
+            else:
+                alpha = 90 + int(165 * min(1.0, n / mx))
+                sq.setStyleSheet(f"background: rgba(74,143,239,{alpha}); border-radius: 3px;")
+            strip.addWidget(sq)
+        strip.addStretch()
+        act.addLayout(strip)
+
+
 class TransformsPage(QWidget):
     """Edit the 8 Opt+1…8 rewrite prompts (were only editable via settings.json)."""
 
@@ -1272,12 +1402,13 @@ class HubWindow(QWidget):
         sl.addSpacing(18)
 
         self.btn_home = SidebarButton("🏠", "Home")
+        self.btn_insights = SidebarButton("📊", "Insights")
         self.btn_hist = SidebarButton("🕐", "Historial")
         self.btn_dict = SidebarButton("📖", "Diccionario")
         self.btn_snip = SidebarButton("✨", "Snippets")
         self.btn_trans = SidebarButton("🪄", "Transforms")
         self.btn_set = SidebarButton("⚙️", "Ajustes")
-        for b in (self.btn_home, self.btn_hist, self.btn_dict, self.btn_snip, self.btn_trans, self.btn_set):
+        for b in (self.btn_home, self.btn_insights, self.btn_hist, self.btn_dict, self.btn_snip, self.btn_trans, self.btn_set):
             sl.addWidget(b)
         sl.addStretch()
         self.btn_home.setChecked(True)
@@ -1286,12 +1417,14 @@ class HubWindow(QWidget):
         # Pages
         self.pages = QStackedWidget()
         self.home_page = HomePage(db)
+        self.insights_page = InsightsPage(db)
         self.history_page = HistoryPage(db)
         self.dict_page = DictionaryPage()
         self.snippets_page = SnippetsPage()
         self.transforms_page = TransformsPage()
         self.settings_page = SettingsPage()
         self.pages.addWidget(self.home_page)
+        self.pages.addWidget(self.insights_page)
         self.pages.addWidget(self.history_page)
         self.pages.addWidget(self.dict_page)
         self.pages.addWidget(self.snippets_page)
@@ -1300,19 +1433,22 @@ class HubWindow(QWidget):
         root.addWidget(self.pages, 1)
 
         self.btn_home.clicked.connect(lambda: self._go(0))
-        self.btn_hist.clicked.connect(lambda: self._go(1))
-        self.btn_dict.clicked.connect(lambda: self._go(2))
-        self.btn_snip.clicked.connect(lambda: self._go(3))
-        self.btn_trans.clicked.connect(lambda: self._go(4))
-        self.btn_set.clicked.connect(lambda: self._go(5))
+        self.btn_insights.clicked.connect(lambda: self._go(1))
+        self.btn_hist.clicked.connect(lambda: self._go(2))
+        self.btn_dict.clicked.connect(lambda: self._go(3))
+        self.btn_snip.clicked.connect(lambda: self._go(4))
+        self.btn_trans.clicked.connect(lambda: self._go(5))
+        self.btn_set.clicked.connect(lambda: self._go(6))
 
     def _go(self, idx: int):
         self.pages.setCurrentIndex(idx)
         if idx == 0:
             self.home_page.reload()
         elif idx == 1:
+            self.insights_page.reload()
+        elif idx == 2:
             self.history_page.reload()
-        elif idx == 3:
+        elif idx == 4:
             self.snippets_page.reload()
 
     def showEvent(self, event):

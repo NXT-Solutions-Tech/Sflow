@@ -261,6 +261,11 @@ class SFlowApp(QObject):
     def _on_hotkey_pressed(self):
         try:
             save_frontmost_app()
+            try:
+                from core.context import detect_active_app
+                self._dictation_app = detect_active_app()[1] or None
+            except Exception:
+                self._dictation_app = None
             self.recorder.start()
             self.pill.set_state(PillWidget.STATE_RECORDING)
         except Exception as e:
@@ -337,6 +342,7 @@ class SFlowApp(QObject):
             self.db.insert(
                 text=final_text, duration_seconds=duration,
                 model=model_id, audio_path=audio_path,
+                app=getattr(self, "_dictation_app", None),
             )
         except Exception as e:
             log_exc("db.insert FAILED", e)
