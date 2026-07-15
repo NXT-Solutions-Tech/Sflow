@@ -172,22 +172,22 @@ class AudioVisualizer(QWidget):
             painter.end()
             return
 
-        bar_w = 1.8
-        gap = 2.0
+        bar_w = 2.1
+        gap = 1.8
         total_w = self.num_bars * bar_w + (self.num_bars - 1) * gap
         x_off = (w - total_w) / 2.0
         min_h = 2.0
         center_idx = self.num_bars / 2.0
-        # Cap bar height so it never escapes the pill — max 90% of pill height.
-        max_bar_h = h * 0.9
+        # Cap bar height so it never escapes the pill — max 95% of pill height.
+        max_bar_h = h * 0.95
 
         painter.setPen(Qt.PenStyle.NoPen)
 
         for i, val in enumerate(self.bar_values):
             dist = abs(i - center_idx + 0.5) / center_idx
-            # Gaussian bell-curve taper from center
-            taper = math.exp(-dist * dist * 1.2)
-            bar_h = max(min_h, min(max_bar_h, val * h * 1.1 * taper))
+            # Gaussian bell-curve taper from center (gentler → fuller wave)
+            taper = math.exp(-dist * dist * 0.85)
+            bar_h = max(min_h, min(max_bar_h, val * h * 1.45 * taper))
             x = x_off + i * (bar_w + gap)
             cy = h / 2.0
             y = cy - bar_h / 2.0
@@ -197,7 +197,7 @@ class AudioVisualizer(QWidget):
             # Glow layer — soft halo behind each bar. Dimmed vs. previous
             # version (was 40); too much glow read as "muddy" at small sizes.
             if val > 0.04:
-                glow_alpha = int(val * 28 * taper)
+                glow_alpha = int(val * 38 * taper)
                 glow_spread = bar_w + 3.0
                 glow_rect = QRectF(
                     x - (glow_spread - bar_w) / 2, y - 1,
@@ -208,8 +208,8 @@ class AudioVisualizer(QWidget):
 
             # Main bar — vertical gradient fading at tips
             gradient = QLinearGradient(x, y, x, y + bar_h)
-            peak_alpha = int((90 + val * 150) * taper)
-            edge_alpha = int(peak_alpha * 0.3)
+            peak_alpha = int((125 + val * 130) * taper)
+            edge_alpha = int(peak_alpha * 0.35)
             gradient.setColorAt(0.0, QColor(255, 255, 255, edge_alpha))
             gradient.setColorAt(0.35, QColor(255, 255, 255, peak_alpha))
             gradient.setColorAt(0.65, QColor(255, 255, 255, peak_alpha))
