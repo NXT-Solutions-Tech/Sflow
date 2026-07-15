@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""SFlow — Voice-to-text desktop tool. Groq Whisper + optional local parakeet,
-LLM cleanup, per-app tone, Command Mode, Liquid Glass pill."""
+"""SFlow — Voice-to-text desktop tool. Local Whisper Turbo / Parakeet (offline,
+default) with Groq cloud fallback, LLM cleanup, per-app tone, Command Mode,
+and a light+dark native Hub."""
 
 import os
 import sys
@@ -36,7 +37,6 @@ from core.transform import TransformHandler
 from core.relaunch import relaunch_app
 from core.logger import log, log_exc
 from db.database import TranscriptionDB
-from web.server import start_web_server
 from config import LOGO_PATH, APP_DATA_DIR, AUDIO_DIR, get_setting
 from ui import theme
 
@@ -199,7 +199,7 @@ def _set_launch_at_login(enabled: bool):
             os.remove(_PLIST_PATH)
 
 
-def _setup_tray(app: QApplication, port: int, open_hub) -> QSystemTrayIcon:
+def _setup_tray(app: QApplication, open_hub) -> QSystemTrayIcon:
     pixmap = QPixmap(LOGO_PATH)
     if pixmap.isNull():
         icon = QIcon()
@@ -218,10 +218,6 @@ def _setup_tray(app: QApplication, port: int, open_hub) -> QSystemTrayIcon:
     hub_action = QAction("Abrir Hub  (⌘⇧H)", menu)
     hub_action.triggered.connect(open_hub)
     menu.addAction(hub_action)
-
-    dashboard = QAction(f"Dashboard web (:{port})", menu)
-    dashboard.triggered.connect(lambda: subprocess.run(["open", f"http://localhost:{port}"], capture_output=True))
-    menu.addAction(dashboard)
     menu.addSeparator()
 
     login_action = QAction("Iniciar con macOS", menu)
@@ -591,7 +587,6 @@ def main():
     except Exception:
         pass
 
-    port = start_web_server()
     _ensure_accessibility()
 
     sflow = SFlowApp()
@@ -607,7 +602,7 @@ def main():
         sflow.hub.raise_()
         sflow.hub.activateWindow()
 
-    tray = _setup_tray(app, port, open_hub)  # noqa: F841
+    tray = _setup_tray(app, open_hub)  # noqa: F841
 
     sys.exit(app.exec())
 

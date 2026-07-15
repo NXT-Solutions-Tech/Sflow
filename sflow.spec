@@ -69,11 +69,6 @@ a = Analysis(
         'PyQt6.QtGui',
         'PyQt6.QtSvg',          # Lucide SVG rendering (ui/icons.py)
         'PyQt6.QtSvgWidgets',
-        # Flask
-        'flask',
-        'jinja2',
-        'markupsafe',
-        'werkzeug',
         # sounddevice
         '_sounddevice',
         'sounddevice',

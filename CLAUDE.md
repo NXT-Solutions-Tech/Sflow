@@ -2,7 +2,7 @@
 
 ## What is SFlow?
 
-SFlow is a macOS voice-to-text desktop tool that replaces Wispr Flow ($15/month). It captures audio via global hotkeys, transcribes using Groq Whisper API (~$0.02/hour), and auto-pastes text wherever the cursor is. It includes a floating pill UI overlay, real-time audio visualization, SQLite history, and a web dashboard.
+SFlow is a macOS voice-to-text desktop tool that replaces Wispr Flow ($15/month). It captures audio via global hotkeys, transcribes on-device with local Whisper Turbo/Parakeet (Groq cloud as fallback), and auto-pastes text wherever the cursor is. It includes a floating pill UI overlay, real-time audio visualization, SQLite history, and a native light+dark Hub (the former Flask web dashboard was retired — the Hub supersedes it).
 
 ## Quick Start (Dev Mode)
 

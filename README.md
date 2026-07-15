@@ -32,7 +32,7 @@ Built as a replacement for [Wispr Flow](https://wispr.com) ($15/month). SFlow us
 - **Floating pill UI** — minimal overlay with real-time audio visualization bars
 - **No focus stealing** — pill floats above everything without interrupting your work (native macOS APIs)
 - **Auto-paste** — text appears exactly where your cursor was
-- **Web dashboard** — browse, search, and copy transcription history at `localhost:5678`
+- **Native Hub** — light+dark dashboard (Cmd+Shift+H) to browse history, edit the dictionary, snippets, transforms, insights and settings
 - **SQLite history** — every transcription saved locally with timestamp and duration
 - **Multilingual** — supports all languages Whisper supports (English, Spanish, French, etc.)
 - **First-run setup** — asks for your Groq API key on first launch, no config files to edit
@@ -108,7 +108,7 @@ transcript instead of blocking. In a packaged `.app`, `.env` lives at
 |--------|----------|
 | **Push-to-talk** | Hold `Ctrl+Shift`, speak, release |
 | **Hands-free** | Double-tap `Ctrl` to start, tap `Ctrl` to stop |
-| **View history** | Click "Abrir Dashboard" in menu bar, or `http://localhost:5678` |
+| **View history** | Open the Hub: menu bar → "Abrir Hub", or `Cmd+Shift+H` |
 | **Start with macOS** | Toggle in menu bar → "Iniciar con macOS" |
 | **Quit** | Menu bar → "Salir" (or `Ctrl+C` in dev mode) |
 
@@ -137,11 +137,11 @@ SFlow needs these permissions (System Settings → Privacy & Security):
 ## Architecture
 
 ```
-Hotkey (pynput) → Audio Capture (sounddevice) → Groq Whisper API → Auto-Paste (AppleScript)
+Hotkey (pynput) → Audio Capture (sounddevice) → Whisper Turbo (local) / Groq (fallback) → Auto-Paste (AppleScript)
                         ↓                                                    ↓
                   Audio Bars (QPainter)                              SQLite Database
                         ↓                                                    ↓
-                  Floating Pill (PyQt6 + PyObjC)                    Web Dashboard (Flask)
+                  Floating Pill (PyQt6 + PyObjC)                    Native Hub (PyQt6, light+dark)
 ```
 
 Key technical decisions:
