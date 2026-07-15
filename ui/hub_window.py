@@ -83,42 +83,16 @@ class EditTranscriptDialog(QDialog):
 
         self.editor = QPlainTextEdit()
         self.editor.setPlainText(original_text)
-        self.editor.setStyleSheet(f"""
-            QPlainTextEdit {{
-                background: {C.BG_INPUT}; color: {C.TEXT};
-                border: 1px solid {C.DIVIDER}; border-radius: 6px;
-                padding: 10px; font-size: 13px;
-            }}
-            QPlainTextEdit:focus {{ border-color: {C.ACCENT}; }}
-        """)
         root.addWidget(self.editor, 1)
 
         row = QHBoxLayout()
         row.addStretch()
-        cancel = QPushButton("Cancelar")
-        cancel.setCursor(Qt.CursorShape.PointingHandCursor)
-        cancel.setStyleSheet(f"""
-            QPushButton {{
-                background: {C.BG_INPUT}; color: {C.TEXT};
-                border: 1px solid {C.DIVIDER}; border-radius: 6px;
-                padding: 8px 18px; font-size: 12px;
-            }}
-            QPushButton:hover {{ background: {C.BG_HOVER}; }}
-        """)
+        cancel = secondary_button("Cancelar")
         cancel.clicked.connect(self.reject)
         row.addWidget(cancel)
 
-        save = QPushButton("Guardar")
+        save = primary_button("Guardar")
         save.setDefault(True)
-        save.setCursor(Qt.CursorShape.PointingHandCursor)
-        save.setStyleSheet(f"""
-            QPushButton {{
-                background: {C.ACCENT}; color: white;
-                border: none; border-radius: 6px;
-                padding: 8px 18px; font-weight: 500; font-size: 12px;
-            }}
-            QPushButton:hover {{ background: {C.ACCENT_HOVER}; }}
-        """)
         save.clicked.connect(self._save)
         row.addWidget(save)
         root.addLayout(row)
@@ -340,29 +314,15 @@ class HistoryPage(QWidget):
             icons.icon("search", color=C.TEXT_FAINT, size=16),
             QLineEdit.ActionPosition.LeadingPosition,
         )
-        self.search.setStyleSheet(f"""
-            QLineEdit {{
-                background: {C.BG_INPUT}; color: {C.TEXT};
-                border: 1px solid {C.DIVIDER}; border-radius: 8px;
-                padding: 8px 12px; font-size: 13px;
-            }}
-            QLineEdit:focus {{ border-color: {C.ACCENT}; }}
-        """)
         self.search.textChanged.connect(self._filter)
         row.addWidget(self.search)
 
         refresh = QPushButton()
+        refresh.setObjectName("icon")
         refresh.setIcon(icons.icon("refresh", color=C.TEXT_DIM, size=16))
         refresh.setIconSize(QSize(16, 16))
         refresh.setFixedSize(36, 36)
         refresh.setCursor(Qt.CursorShape.PointingHandCursor)
-        refresh.setStyleSheet(f"""
-            QPushButton {{
-                background: {C.BG_INPUT};
-                border: 1px solid {C.DIVIDER}; border-radius: 8px;
-            }}
-            QPushButton:hover {{ background: {C.BG_HOVER}; }}
-        """)
         refresh.clicked.connect(self.reload)
         row.addWidget(refresh)
 
@@ -513,24 +473,12 @@ class DictionaryPage(QWidget):
 
         row = QHBoxLayout()
         row.addStretch()
-        save = QPushButton("Guardar")
-        save.setCursor(Qt.CursorShape.PointingHandCursor)
-        save.setStyleSheet(self._btn_primary_style())
+        save = primary_button("Guardar")
         save.clicked.connect(self._save)
         row.addWidget(save)
         root.addLayout(row)
 
         self.setLayout(root)
-
-    def _btn_primary_style(self):
-        return f"""
-            QPushButton {{
-                background: {C.ACCENT}; color: white;
-                border: none; border-radius: 8px;
-                padding: 8px 20px; font-weight: 500; font-size: 13px;
-            }}
-            QPushButton:hover {{ background: {C.ACCENT_HOVER}; }}
-        """
 
     def _load(self):
         try:
@@ -588,27 +536,16 @@ class SnippetsPage(QWidget):
 
         self.trigger_input = QLineEdit()
         self.trigger_input.setPlaceholderText("trigger (ej: mi correo)")
-        self.trigger_input.setStyleSheet(self._input_style())
         fl.addWidget(self.trigger_input)
 
         self.expansion_input = QPlainTextEdit()
         self.expansion_input.setPlaceholderText("expansión (lo que se pega cuando digas el trigger)")
         self.expansion_input.setMaximumHeight(80)
-        self.expansion_input.setStyleSheet(f"""
-            QPlainTextEdit {{
-                background: {C.BG_INPUT}; color: {C.TEXT};
-                border: 1px solid {C.DIVIDER}; border-radius: 6px;
-                padding: 8px; font-size: 13px;
-            }}
-            QPlainTextEdit:focus {{ border-color: {C.ACCENT}; }}
-        """)
         fl.addWidget(self.expansion_input)
 
         row = QHBoxLayout()
         row.addStretch()
-        add_btn = QPushButton("Agregar")
-        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        add_btn.setStyleSheet(self._btn_style())
+        add_btn = primary_button("Agregar")
         add_btn.clicked.connect(self._add)
         row.addWidget(add_btn)
         fl.addLayout(row)
@@ -630,26 +567,6 @@ class SnippetsPage(QWidget):
 
         self.setLayout(root)
         self.reload()
-
-    def _input_style(self):
-        return f"""
-            QLineEdit {{
-                background: {C.BG_INPUT}; color: {C.TEXT};
-                border: 1px solid {C.DIVIDER}; border-radius: 6px;
-                padding: 8px 10px; font-size: 13px;
-            }}
-            QLineEdit:focus {{ border-color: {C.ACCENT}; }}
-        """
-
-    def _btn_style(self):
-        return f"""
-            QPushButton {{
-                background: {C.ACCENT}; color: white;
-                border: none; border-radius: 6px;
-                padding: 7px 18px; font-weight: 500; font-size: 12px;
-            }}
-            QPushButton:hover {{ background: {C.ACCENT_HOVER}; }}
-        """
 
     def _add(self):
         t = self.trigger_input.text().strip()
@@ -814,11 +731,6 @@ class SettingsPage(QWidget):
             lb.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; margin-top: 2px;")
             return lb
 
-        _input_qss = (
-            f"background: {C.BG_INPUT}; color: {C.TEXT}; border: 1px solid {C.DIVIDER};"
-            f" border-radius: 6px; padding: 7px 10px; font-size: 13px;"
-        )
-
         # ============ GENERAL ============
         tl = group("Transcripción", gen)
         tl.addWidget(dim("Modelo de transcripción"))
@@ -930,11 +842,11 @@ class SettingsPage(QWidget):
         kl = group("API Keys · macOS Keychain", sysl)
         kl.addWidget(dim("Groq API Key (STT en la nube + limpieza Llama)"))
         self.groq_key = QLineEdit(); self.groq_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.groq_key.setPlaceholderText(self._key_status("GROQ_API_KEY")); self.groq_key.setStyleSheet(_input_qss)
+        self.groq_key.setPlaceholderText(self._key_status("GROQ_API_KEY"))
         kl.addWidget(self.groq_key)
         kl.addWidget(dim("OpenRouter API Key (limpieza GLM)"))
         self.or_key = QLineEdit(); self.or_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.or_key.setPlaceholderText(self._key_status("OPENROUTER_API_KEY")); self.or_key.setStyleSheet(_input_qss)
+        self.or_key.setPlaceholderText(self._key_status("OPENROUTER_API_KEY"))
         kl.addWidget(self.or_key)
         kl.addWidget(dim("Se guardan en el Keychain de macOS. Deja en blanco para conservar la actual."))
 
@@ -942,29 +854,11 @@ class SettingsPage(QWidget):
         bar = QHBoxLayout()
         bar.addStretch()
 
-        relaunch_btn = QPushButton("Reiniciar SFlow")
-        relaunch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        relaunch_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {C.BG_INPUT}; color: {C.TEXT};
-                border: 1px solid {C.DIVIDER}; border-radius: 8px;
-                padding: 10px 18px; font-weight: 500; font-size: 13px;
-            }}
-            QPushButton:hover {{ background: {C.BG_HOVER}; }}
-        """)
+        relaunch_btn = secondary_button("Reiniciar SFlow")
         relaunch_btn.clicked.connect(self._relaunch)
         bar.addWidget(relaunch_btn)
 
-        save = QPushButton("Guardar ajustes")
-        save.setCursor(Qt.CursorShape.PointingHandCursor)
-        save.setStyleSheet(f"""
-            QPushButton {{
-                background: {C.ACCENT}; color: white;
-                border: none; border-radius: 8px;
-                padding: 10px 24px; font-weight: 500; font-size: 13px;
-            }}
-            QPushButton:hover {{ background: {C.ACCENT_HOVER}; }}
-        """)
+        save = primary_button("Guardar ajustes")
         save.clicked.connect(self._save)
         bar.addWidget(save)
         root.addLayout(bar)
@@ -1202,8 +1096,6 @@ class TransformsPage(QWidget):
 
     def __init__(self):
         super().__init__()
-        _inp = (f"background: {C.BG_INPUT}; color: {C.TEXT}; border: 1px solid {C.DIVIDER};"
-                f" border-radius: 6px; padding: 7px 10px; font-size: 13px;")
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 22, 28, 16)
         outer.setSpacing(12)
@@ -1243,14 +1135,11 @@ class TransformsPage(QWidget):
             head.addWidget(badge)
             le = QLineEdit(p.get("label", ""))
             le.setPlaceholderText("Nombre del transform")
-            le.setStyleSheet(_inp)
             head.addWidget(le, 1)
             cl.addLayout(head)
             pe = QPlainTextEdit(p.get("prompt", ""))
             pe.setPlaceholderText("Instrucción para el LLM (ej: Reescribe este texto de forma más concisa…)")
             pe.setFixedHeight(60)
-            pe.setStyleSheet(f"QPlainTextEdit {{ background: {C.BG_INPUT}; color: {C.TEXT};"
-                             f" border: 1px solid {C.DIVIDER}; border-radius: 6px; padding: 6px 8px; font-size: 13px; }}")
             cl.addWidget(pe)
             il.addWidget(card)
             self._rows.append((le, pe))
@@ -1259,23 +1148,11 @@ class TransformsPage(QWidget):
         outer.addWidget(scroll, 1)
 
         bar = QHBoxLayout()
-        reset = QPushButton("Restaurar predeterminados")
-        reset.setCursor(Qt.CursorShape.PointingHandCursor)
-        reset.setStyleSheet(f"""
-            QPushButton {{ background: {C.BG_INPUT}; color: {C.TEXT}; border: 1px solid {C.DIVIDER};
-                border-radius: 8px; padding: 10px 18px; font-weight: 500; font-size: 13px; }}
-            QPushButton:hover {{ background: {C.BG_HOVER}; }}
-        """)
+        reset = secondary_button("Restaurar predeterminados")
         reset.clicked.connect(self._reset)
         bar.addWidget(reset)
         bar.addStretch()
-        save = QPushButton("Guardar transforms")
-        save.setCursor(Qt.CursorShape.PointingHandCursor)
-        save.setStyleSheet(f"""
-            QPushButton {{ background: {C.ACCENT}; color: white; border: none;
-                border-radius: 8px; padding: 10px 24px; font-weight: 500; font-size: 13px; }}
-            QPushButton:hover {{ background: {C.ACCENT_HOVER}; }}
-        """)
+        save = primary_button("Guardar transforms")
         save.clicked.connect(self._save)
         bar.addWidget(save)
         outer.addLayout(bar)
