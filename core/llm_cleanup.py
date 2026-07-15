@@ -138,6 +138,10 @@ class LLMCleanup:
                 ],
                 "temperature": 0.0,
                 "max_tokens": 1500,
+                # GLM (y otros modelos de razonamiento) gastarian todo el presupuesto
+                # de tokens "pensando" y devolverian content vacio. Para limpieza de
+                # dictado no queremos reasoning: lo apagamos para que escriba directo.
+                "reasoning": {"enabled": False},
             },
             timeout=config.OPENROUTER_TIMEOUT,
         )
