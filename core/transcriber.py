@@ -82,15 +82,16 @@ class Transcriber:
         if get_setting("smart_commands_enabled", True):
             raw = apply_smart_commands(raw)
 
-        # LLM cleanup — tone-aware
-        if get_setting("llm_cleanup_enabled", True):
+        # LLM cleanup — Auto Cleanup levels (none/light/medium), tone-aware
+        level = get_setting("auto_cleanup_level", "none")
+        if level != "none":
             tone = "default"
             if get_setting("context_aware_tone", True):
                 try:
                     tone = tone_for_active_app()
                 except Exception:
                     tone = "default"
-            raw = self._cleanup.clean(raw, tone=tone)
+            raw = self._cleanup.clean(raw, tone=tone, level=level)
 
         # Snippets — run LAST so expansions are inserted verbatim, not cleaned
         if get_setting("snippets_enabled", True):

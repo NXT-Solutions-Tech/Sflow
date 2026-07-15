@@ -802,9 +802,13 @@ class SettingsPage(QWidget):
 
         # --- AI cleanup ---
         al = group("Procesamiento con LLM")
-        self.llm = QCheckBox("Limpiar con Llama (remueve muletillas, puntúa)")
-        self.llm.setChecked(get_setting("llm_cleanup_enabled", True))
-        al.addWidget(self.llm)
+        al.addWidget(QLabel("Auto Cleanup (limpieza con LLM):"))
+        self.cleanup_combo = QComboBox()
+        self.cleanup_combo.addItem("None — sin limpieza, texto verbatim", "none")
+        self.cleanup_combo.addItem("Light — muletillas + puntuación", "light")
+        self.cleanup_combo.addItem("Medium — claridad + concisión", "medium")
+        self.cleanup_combo.setCurrentIndex(max(0, self.cleanup_combo.findData(get_setting("auto_cleanup_level", "none"))))
+        al.addWidget(self.cleanup_combo)
 
         self.context = QCheckBox("Adaptar tono según app activa (Slack casual, Gmail formal, etc.)")
         self.context.setChecked(get_setting("context_aware_tone", True))
@@ -901,7 +905,7 @@ class SettingsPage(QWidget):
         set_setting("transcribe_backend", self.backend.currentData())
         set_setting("paste_backend", self.paste_combo.currentData())
         set_setting("streaming_paste_enabled", self.streaming.isChecked())
-        set_setting("llm_cleanup_enabled", self.llm.isChecked())
+        set_setting("auto_cleanup_level", self.cleanup_combo.currentData())
         set_setting("context_aware_tone", self.context.isChecked())
         set_setting("smart_commands_enabled", self.commands.isChecked())
         set_setting("personal_dictionary_enabled", self.dict_toggle.isChecked())

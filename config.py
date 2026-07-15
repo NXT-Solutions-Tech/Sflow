@@ -39,7 +39,8 @@ def _default_settings() -> dict:
         "stt_model": "whisper-turbo-local",
         "stt_language": "auto",  # "auto" = autodeteccion (ES/EN/...); o codigo ISO como "es"/"en" para forzar
         "transcribe_backend": "groq",   # LEGACY — migrado a stt_model (ver load_settings)
-        "llm_cleanup_enabled": False,  # OFF por default: fidelidad > limpieza. Opt-in en Hub si se desea auto-puntuacion.
+        "auto_cleanup_level": "none",  # "none" | "light" | "medium" (M2 Auto Cleanup). none = sin LLM.
+        "llm_cleanup_enabled": False,  # LEGACY — migrado a auto_cleanup_level (ver load_settings).
         "llm_model": "llama-3.3-70b-versatile",  # modelo con mejor instruction-following (menos alucinaciones)
         "llm_cleanup_provider": "groq",  # "groq" (Llama) | "openrouter" (GLM). Default groq = comportamiento actual, GLM es opt-in.
         "openrouter_cleanup_model": "z-ai/glm-4.7-flash",  # slug OpenRouter para el proveedor GLM (verificar vigencia)
@@ -88,6 +89,9 @@ def load_settings() -> dict:
             defaults["stt_model"] = (
                 "groq-turbo" if loaded["transcribe_backend"] == "groq" else "whisper-turbo-local"
             )
+        # --- Migracion legacy: llm_cleanup_enabled (bool) -> auto_cleanup_level ---
+        if "auto_cleanup_level" not in loaded and "llm_cleanup_enabled" in loaded:
+            defaults["auto_cleanup_level"] = "light" if loaded["llm_cleanup_enabled"] else "none"
         return defaults
     except Exception:
         return defaults

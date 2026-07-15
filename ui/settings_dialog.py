@@ -56,9 +56,14 @@ class SettingsDialog(QDialog):
         # --- AI post-processing ---
         ai_group = QGroupBox("Procesamiento con LLM")
         al = QVBoxLayout()
-        self.cb_llm = QCheckBox("Limpiar transcripción con LLM (remueve muletillas, puntúa)")
-        self.cb_llm.setChecked(get_setting("llm_cleanup_enabled", True))
-        al.addWidget(self.cb_llm)
+        al.addWidget(QLabel("Auto Cleanup (limpieza con LLM):"))
+        self.cleanup_combo = QComboBox()
+        self.cleanup_combo.addItem("None · sin limpieza (verbatim)", "none")
+        self.cleanup_combo.addItem("Light · muletillas + puntuación", "light")
+        self.cleanup_combo.addItem("Medium · claridad + concisión", "medium")
+        _lvl = get_setting("auto_cleanup_level", "none")
+        self.cleanup_combo.setCurrentIndex(max(0, self.cleanup_combo.findData(_lvl)))
+        al.addWidget(self.cleanup_combo)
 
         prov_row = QHBoxLayout()
         prov_row.addWidget(QLabel("Proveedor de limpieza:"))
@@ -158,7 +163,7 @@ class SettingsDialog(QDialog):
     def _save(self):
         set_setting("stt_model", self.model_combo.currentData())
         set_setting("input_device", self.mic_combo.currentData())
-        set_setting("llm_cleanup_enabled", self.cb_llm.isChecked())
+        set_setting("auto_cleanup_level", self.cleanup_combo.currentData())
         set_setting("llm_cleanup_provider", self.provider_combo.currentData())
         set_setting("context_aware_tone", self.cb_context.isChecked())
         set_setting("smart_commands_enabled", self.cb_commands.isChecked())

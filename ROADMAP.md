@@ -19,8 +19,8 @@ cleanup PRP) · this file. Kickoff prompt lives in the session that created the 
 | # | Track | Goal | Size | Status |
 |---|-------|------|------|--------|
 | M1 | Interface | Reactive pill: live waveform + visibility bound to dictation state (fade in/out, no idle pill) | S | **DONE** ✅ |
-| **M2** | Quality | Auto Cleanup levels None/Light/Medium (None bypasses LLM) | M | **IN PROGRESS** |
-| M3 | Quality | Text substitutions ("btw→by the way") as a post-transcription pass, editable in Dictionary | M | TODO |
+| M2 | Quality | Auto Cleanup levels None/Light/Medium (None bypasses LLM) | M | **DONE** ✅ |
+| **M3** | Quality | Text substitutions ("btw→by the way") as a post-transcription pass, editable in Dictionary | M | **IN PROGRESS** |
 | M4 | Settings | Unified native Settings window, General/System tabs; consolidate the two UIs; keys→Keychain | L | TODO |
 | M5 | Settings | Transforms editor for the 8 Opt+N prompt slots | S | TODO |
 | M6 | Interface | Richer Insights (WPM, per-app usage, streak) — needs DB columns | L | TODO |
