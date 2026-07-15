@@ -489,7 +489,7 @@ class DictionaryPage(QWidget):
         title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
         root.addWidget(title)
 
-        sub = QLabel("Una palabra o frase por línea. Se usa como pista de vocabulario para Whisper — mejora reconocimiento de nombres propios, términos técnicos, jerga.")
+        sub = QLabel("Una palabra o frase por línea (pista de vocabulario para Whisper: nombres, jerga, términos técnicos).\nPara sustituciones automáticas de texto usa una flecha:  btw -> by the way")
         sub.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
         sub.setWordWrap(True)
         root.addWidget(sub)
@@ -822,6 +822,10 @@ class SettingsPage(QWidget):
         self.dict_toggle.setChecked(get_setting("personal_dictionary_enabled", True))
         al.addWidget(self.dict_toggle)
 
+        self.subs_toggle = QCheckBox("Sustituciones de texto del diccionario (btw → by the way)")
+        self.subs_toggle.setChecked(get_setting("text_substitutions_enabled", True))
+        al.addWidget(self.subs_toggle)
+
         # --- UX ---
         ul = group("UX")
         self.glass = QCheckBox("Liquid Glass en la pill (experimental — macOS 26+)")
@@ -909,6 +913,7 @@ class SettingsPage(QWidget):
         set_setting("context_aware_tone", self.context.isChecked())
         set_setting("smart_commands_enabled", self.commands.isChecked())
         set_setting("personal_dictionary_enabled", self.dict_toggle.isChecked())
+        set_setting("text_substitutions_enabled", self.subs_toggle.isChecked())
         set_setting("liquid_glass_enabled", self.glass.isChecked())
         set_setting("command_mode_enabled", self.command_mode.isChecked())
         mb = self.mouse.currentData()

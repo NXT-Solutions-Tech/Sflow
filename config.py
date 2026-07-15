@@ -47,6 +47,7 @@ def _default_settings() -> dict:
         "context_aware_tone": True,
         "smart_commands_enabled": True,
         "personal_dictionary_enabled": True,
+        "text_substitutions_enabled": True,  # "btw -> by the way" desde el diccionario (M3)
         "input_device": "",  # "" = microfono predeterminado del sistema; si no, nombre exacto del dispositivo
 
         "liquid_glass_enabled": False,

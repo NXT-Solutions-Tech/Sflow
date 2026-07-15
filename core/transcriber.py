@@ -14,6 +14,7 @@ from core.smart_commands import apply as apply_smart_commands
 from core.dictionary import as_whisper_prompt
 from core.context import tone_for_active_app
 from core.snippets_matcher import apply as apply_snippets
+from core.substitutions import apply as apply_substitutions
 
 # Motores que aprovechan el hint de vocabulario (diccionario personal).
 _VOCAB_ENGINES = {"groq", "whisper"}
@@ -92,6 +93,13 @@ class Transcriber:
                 except Exception:
                     tone = "default"
             raw = self._cleanup.clean(raw, tone=tone, level=level)
+
+        # Text substitutions (btw -> by the way) from the personal dictionary
+        if get_setting("text_substitutions_enabled", True):
+            try:
+                raw = apply_substitutions(raw)
+            except Exception:
+                pass
 
         # Snippets — run LAST so expansions are inserted verbatim, not cleaned
         if get_setting("snippets_enabled", True):
