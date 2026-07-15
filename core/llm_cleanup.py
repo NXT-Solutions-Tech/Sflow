@@ -1,11 +1,20 @@
-"""LLM post-processing via Groq Llama — removes filler, fixes punctuation.
+"""LLM post-processing — removes filler, fixes punctuation.
 
 Adds ~100-300ms latency. This is THE feature that separates SFlow from
 commodity dictation apps. System prompt adapts per active app (context-aware).
+
+Two selectable providers (setting `llm_cleanup_provider`), same system prompt:
+  - "groq"       → Groq Llama (default, comportamiento historico)
+  - "openrouter" → OpenRouter GLM (opt-in)
+Ambos son fail-open: cualquier error/timeout/falta-de-key devuelve el texto crudo,
+nunca bloquea el pegado.
 """
 import os
+import requests
 from groq import Groq
-from config import LLM_CLEANUP_MODEL
+import config
+from config import LLM_CLEANUP_MODEL, get_setting
+from core.logger import log as _log
 
 
 _BASE_RULES = """Eres un corrector MINIMO de transcripciones de voz. Tu trabajo es PRESERVAR la transcripcion casi intacta, solo haciendo los cambios ESTRICTAMENTE necesarios.
@@ -50,6 +59,19 @@ TONE_PROFILES = {
 }
 
 
+def _build_system_prompt(tone: str) -> str:
+    """Prompt compartido por ambos proveedores (mismas reglas de correccion)."""
+    tone_rule = TONE_PROFILES.get(tone, TONE_PROFILES["default"])
+    return f"{_BASE_RULES}\n\n{tone_rule}"
+
+
+def _strip_fences(cleaned: str) -> str:
+    """Quita fences de markdown si el LLM las agrega."""
+    if cleaned.startswith("```") and cleaned.endswith("```"):
+        cleaned = cleaned.strip("`").strip()
+    return cleaned
+
+
 class LLMCleanup:
     def __init__(self):
         self._client = None
@@ -66,23 +88,58 @@ class LLMCleanup:
         if not text or len(text.strip()) < 3:
             return text
 
-        tone_rule = TONE_PROFILES.get(tone, TONE_PROFILES["default"])
-        system_prompt = f"{_BASE_RULES}\n\n{tone_rule}"
+        system_prompt = _build_system_prompt(tone)
+        provider = get_setting("llm_cleanup_provider", "groq")
 
         try:
-            completion = self._get_client().chat.completions.create(
-                model=LLM_CLEANUP_MODEL,
-                messages=[
+            if provider == "openrouter":
+                cleaned = self._clean_openrouter(system_prompt, text)
+            else:
+                cleaned = self._clean_groq(system_prompt, text)
+            cleaned = _strip_fences(cleaned.strip())
+            return cleaned or text
+        except Exception:
+            # Fail-open: red caida, timeout, key mala, rate limit → nunca bloquea el pegado.
+            return text
+
+    def _clean_groq(self, system_prompt: str, text: str) -> str:
+        completion = self._get_client().chat.completions.create(
+            model=LLM_CLEANUP_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text},
+            ],
+            temperature=0.0,  # determinista: 0 randomness para evitar alucinaciones
+            max_tokens=1500,
+        )
+        return completion.choices[0].message.content or ""
+
+    def _clean_openrouter(self, system_prompt: str, text: str) -> str:
+        key = config.OPENROUTER_API_KEY or os.getenv("OPENROUTER_API_KEY", "")
+        if not key:
+            # Sin key no hay nada que hacer: devolver crudo (fail-open). NO logueamos la key.
+            _log("LLM cleanup: OPENROUTER_API_KEY no configurada, se pega texto crudo", "WARN")
+            return text
+        model = get_setting("openrouter_cleanup_model", config.OPENROUTER_CLEANUP_MODEL)
+        resp = requests.post(
+            config.OPENROUTER_URL,
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                # Recomendado por OpenRouter para atribucion/rankings.
+                "HTTP-Referer": "https://github.com/daniel-carreon/sflow",
+                "X-Title": "SFlow",
+            },
+            json={
+                "model": model,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": text},
                 ],
-                temperature=0.0,  # determinista: 0 randomness para evitar alucinaciones
-                max_tokens=1500,
-            )
-            cleaned = completion.choices[0].message.content.strip()
-            # Strip markdown code fences if LLM added them
-            if cleaned.startswith("```") and cleaned.endswith("```"):
-                cleaned = cleaned.strip("`").strip()
-            return cleaned or text
-        except Exception:
-            return text
+                "temperature": 0.0,
+                "max_tokens": 1500,
+            },
+            timeout=config.OPENROUTER_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"] or ""

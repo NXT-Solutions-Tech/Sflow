@@ -87,6 +87,19 @@ cp .env.example .env
 python3 main.py
 ```
 
+### LLM cleanup provider (optional)
+
+The optional transcript cleanup (fillers removed, punctuation fixed) can run through
+either provider, selectable in **Ajustes → Procesamiento con LLM → Proveedor de limpieza**:
+
+- **Groq · Llama** — default, uses your existing `GROQ_API_KEY`.
+- **OpenRouter · GLM** — set `OPENROUTER_API_KEY` in `.env` (get one at
+  [openrouter.ai/keys](https://openrouter.ai/keys)); defaults to the `z-ai/glm-4.6` model.
+
+Both are **fail-open**: if the network, key, or model errors out, SFlow pastes the raw
+transcript instead of blocking. In a packaged `.app`, `.env` lives at
+`~/Library/Application Support/SFlow/.env`.
+
 ---
 
 ## Usage

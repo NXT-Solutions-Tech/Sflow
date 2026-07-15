@@ -3,6 +3,7 @@ sounddevice>=0.4.6
 numpy>=1.26.0
 pynput>=1.7.6
 groq>=0.4.0
+requests>=2.31.0
 python-dotenv>=1.0.0
 flask>=3.0.0
 pyobjc-framework-Cocoa>=10.0

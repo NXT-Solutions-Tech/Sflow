@@ -40,9 +40,26 @@ class SettingsDialog(QDialog):
         # --- AI post-processing ---
         ai_group = QGroupBox("Procesamiento con LLM")
         al = QVBoxLayout()
-        self.cb_llm = QCheckBox("Limpiar transcripción con Llama (remueve muletillas, puntúa)")
+        self.cb_llm = QCheckBox("Limpiar transcripción con LLM (remueve muletillas, puntúa)")
         self.cb_llm.setChecked(get_setting("llm_cleanup_enabled", True))
         al.addWidget(self.cb_llm)
+
+        prov_row = QHBoxLayout()
+        prov_row.addWidget(QLabel("Proveedor de limpieza:"))
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItem("Groq · Llama (nube)", "groq")
+        self.provider_combo.addItem("OpenRouter · GLM (nube)", "openrouter")
+        cur_prov = get_setting("llm_cleanup_provider", "groq")
+        self.provider_combo.setCurrentIndex(max(0, self.provider_combo.findData(cur_prov)))
+        prov_row.addWidget(self.provider_combo)
+        al.addLayout(prov_row)
+
+        prov_hint = QLabel(
+            "OpenRouter (GLM) requiere OPENROUTER_API_KEY en el .env. Si falla o no hay\n"
+            "key, se pega la transcripción cruda (nunca bloquea)."
+        )
+        prov_hint.setStyleSheet("color: gray; font-size: 11px;")
+        al.addWidget(prov_hint)
 
         self.cb_context = QCheckBox("Adaptar tono según la app activa (Slack casual, Gmail formal, código, etc.)")
         self.cb_context.setChecked(get_setting("context_aware_tone", True))
@@ -125,6 +142,7 @@ class SettingsDialog(QDialog):
     def _save(self):
         set_setting("stt_model", self.model_combo.currentData())
         set_setting("llm_cleanup_enabled", self.cb_llm.isChecked())
+        set_setting("llm_cleanup_provider", self.provider_combo.currentData())
         set_setting("context_aware_tone", self.cb_context.isChecked())
         set_setting("smart_commands_enabled", self.cb_commands.isChecked())
         set_setting("personal_dictionary_enabled", self.cb_dict.isChecked())
