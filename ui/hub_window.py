@@ -1033,6 +1033,105 @@ class SettingsPage(QWidget):
             QMessageBox.information(self, "Guardado", "Ajustes guardados.")
 
 
+class TransformsPage(QWidget):
+    """Edit the 8 Opt+1…8 rewrite prompts (were only editable via settings.json)."""
+
+    def __init__(self):
+        super().__init__()
+        _inp = (f"background: {C.BG_INPUT}; color: {C.TEXT}; border: 1px solid {C.DIVIDER};"
+                f" border-radius: 6px; padding: 7px 10px; font-size: 13px;")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(28, 22, 28, 16)
+        outer.setSpacing(12)
+
+        title = QLabel("Transforms")
+        title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
+        outer.addWidget(title)
+        sub = QLabel("Reescrituras con IA sobre el texto seleccionado. Selecciona texto y aplica con ⌥+1…8.")
+        sub.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
+        sub.setWordWrap(True)
+        outer.addWidget(sub)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        inner = QWidget()
+        il = QVBoxLayout(inner)
+        il.setContentsMargins(0, 4, 8, 4)
+        il.setSpacing(10)
+        il.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self._rows = []
+        prompts = get_setting("transform_prompts", [])
+        for i in range(8):
+            p = prompts[i] if i < len(prompts) else {"label": "", "prompt": ""}
+            card = QFrame()
+            card.setStyleSheet(f"QFrame {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 10px; }}")
+            cl = QVBoxLayout(card)
+            cl.setContentsMargins(14, 12, 14, 12)
+            cl.setSpacing(8)
+            head = QHBoxLayout()
+            badge = QLabel(f"⌥ {i+1}")
+            badge.setStyleSheet(f"color: {C.TEXT}; background: {C.BG_INPUT}; border: 1px solid {C.DIVIDER};"
+                                f" border-radius: 6px; padding: 3px 9px; font-size: 12px; font-weight: 600;")
+            head.addWidget(badge)
+            le = QLineEdit(p.get("label", ""))
+            le.setPlaceholderText("Nombre del transform")
+            le.setStyleSheet(_inp)
+            head.addWidget(le, 1)
+            cl.addLayout(head)
+            pe = QPlainTextEdit(p.get("prompt", ""))
+            pe.setPlaceholderText("Instrucción para el LLM (ej: Reescribe este texto de forma más concisa…)")
+            pe.setFixedHeight(60)
+            pe.setStyleSheet(f"QPlainTextEdit {{ background: {C.BG_INPUT}; color: {C.TEXT};"
+                             f" border: 1px solid {C.DIVIDER}; border-radius: 6px; padding: 6px 8px; font-size: 13px; }}")
+            cl.addWidget(pe)
+            il.addWidget(card)
+            self._rows.append((le, pe))
+
+        scroll.setWidget(inner)
+        outer.addWidget(scroll, 1)
+
+        bar = QHBoxLayout()
+        reset = QPushButton("Restaurar predeterminados")
+        reset.setCursor(Qt.CursorShape.PointingHandCursor)
+        reset.setStyleSheet(f"""
+            QPushButton {{ background: {C.BG_INPUT}; color: {C.TEXT}; border: 1px solid {C.DIVIDER};
+                border-radius: 8px; padding: 10px 18px; font-weight: 500; font-size: 13px; }}
+            QPushButton:hover {{ background: {C.BG_HOVER}; }}
+        """)
+        reset.clicked.connect(self._reset)
+        bar.addWidget(reset)
+        bar.addStretch()
+        save = QPushButton("Guardar transforms")
+        save.setCursor(Qt.CursorShape.PointingHandCursor)
+        save.setStyleSheet(f"""
+            QPushButton {{ background: {C.ACCENT}; color: white; border: none;
+                border-radius: 8px; padding: 10px 24px; font-weight: 500; font-size: 13px; }}
+            QPushButton:hover {{ background: #4a8fef; }}
+        """)
+        save.clicked.connect(self._save)
+        bar.addWidget(save)
+        outer.addLayout(bar)
+
+    def _save(self):
+        prompts = [
+            {"label": le.text().strip() or f"Transform {i+1}", "prompt": pe.toPlainText().strip()}
+            for i, (le, pe) in enumerate(self._rows)
+        ]
+        set_setting("transform_prompts", prompts)
+        QMessageBox.information(self, "Guardado", "Transforms actualizados. ⌥+1…8 usan los nuevos prompts.")
+
+    def _reset(self):
+        from config import _default_settings
+        defaults = _default_settings().get("transform_prompts", [])
+        for i, (le, pe) in enumerate(self._rows):
+            d = defaults[i] if i < len(defaults) else {"label": "", "prompt": ""}
+            le.setText(d.get("label", ""))
+            pe.setPlainText(d.get("prompt", ""))
+
+
 class HomePage(QWidget):
     def __init__(self, db: TranscriptionDB):
         super().__init__()
@@ -1176,8 +1275,9 @@ class HubWindow(QWidget):
         self.btn_hist = SidebarButton("🕐", "Historial")
         self.btn_dict = SidebarButton("📖", "Diccionario")
         self.btn_snip = SidebarButton("✨", "Snippets")
+        self.btn_trans = SidebarButton("🪄", "Transforms")
         self.btn_set = SidebarButton("⚙️", "Ajustes")
-        for b in (self.btn_home, self.btn_hist, self.btn_dict, self.btn_snip, self.btn_set):
+        for b in (self.btn_home, self.btn_hist, self.btn_dict, self.btn_snip, self.btn_trans, self.btn_set):
             sl.addWidget(b)
         sl.addStretch()
         self.btn_home.setChecked(True)
@@ -1189,11 +1289,13 @@ class HubWindow(QWidget):
         self.history_page = HistoryPage(db)
         self.dict_page = DictionaryPage()
         self.snippets_page = SnippetsPage()
+        self.transforms_page = TransformsPage()
         self.settings_page = SettingsPage()
         self.pages.addWidget(self.home_page)
         self.pages.addWidget(self.history_page)
         self.pages.addWidget(self.dict_page)
         self.pages.addWidget(self.snippets_page)
+        self.pages.addWidget(self.transforms_page)
         self.pages.addWidget(self.settings_page)
         root.addWidget(self.pages, 1)
 
@@ -1201,7 +1303,8 @@ class HubWindow(QWidget):
         self.btn_hist.clicked.connect(lambda: self._go(1))
         self.btn_dict.clicked.connect(lambda: self._go(2))
         self.btn_snip.clicked.connect(lambda: self._go(3))
-        self.btn_set.clicked.connect(lambda: self._go(4))
+        self.btn_trans.clicked.connect(lambda: self._go(4))
+        self.btn_set.clicked.connect(lambda: self._go(5))
 
     def _go(self, idx: int):
         self.pages.setCurrentIndex(idx)
