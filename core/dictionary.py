@@ -7,11 +7,17 @@ File format: plain text, one term or phrase per line, # comments allowed.
 Max ~224 tokens is Whisper's hard limit — keep concise.
 """
 import os
+import re
 from config import DICTIONARY_PATH
+
+
+# Substitution syntax: "abreviatura -> texto completo" (also => or →).
+_SEP_RE = re.compile(r"\s*(?:->|=>|→)\s*")
 
 
 _DEFAULT_SEED = """# SFlow Personal Dictionary
 # One word, name, or phrase per line. Used as Whisper vocabulary hint.
+# For text substitutions use an arrow:  btw -> by the way
 # Example entries below — edit to taste.
 
 Daniel Carreón
@@ -20,7 +26,12 @@ SFlow
 Groq
 Whisper
 Parakeet
+btw -> by the way
 """
+
+
+def _is_substitution(line: str) -> bool:
+    return bool(_SEP_RE.search(line))
 
 
 def _ensure_file():
@@ -41,9 +52,26 @@ def load_terms() -> list[str]:
     return terms
 
 
+def load_substitutions() -> list[tuple[str, str]]:
+    """Parse 'from -> to' lines into (from, to) pairs, longest trigger first."""
+    _ensure_file()
+    subs = []
+    with open(DICTIONARY_PATH) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = _SEP_RE.split(line, maxsplit=1)
+            if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+                subs.append((parts[0].strip(), parts[1].strip()))
+    subs.sort(key=lambda p: len(p[0]), reverse=True)
+    return subs
+
+
 def as_whisper_prompt(max_chars: int = 800) -> str:
-    """Pack terms into a comma-separated hint, truncated to avoid token cap."""
-    terms = load_terms()
+    """Pack vocab terms into a comma-separated hint, truncated to avoid token cap.
+    Substitution lines (a -> b) are excluded — they're not vocabulary."""
+    terms = [t for t in load_terms() if not _is_substitution(t)]
     if not terms:
         return ""
     joined = ", ".join(terms)

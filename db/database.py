@@ -1,5 +1,22 @@
 import sqlite3
+from datetime import date, timedelta
 from config import DB_PATH
+
+
+def _compute_streak(per_day: dict) -> int:
+    """Consecutive days (ending today, or yesterday) with ≥1 dictation."""
+    if not per_day:
+        return 0
+    d = date.today()
+    if d.isoformat() not in per_day:
+        d = d - timedelta(days=1)
+        if d.isoformat() not in per_day:
+            return 0
+    streak = 0
+    while d.isoformat() in per_day:
+        streak += 1
+        d -= timedelta(days=1)
+    return streak
 
 
 class TranscriptionDB:
@@ -27,15 +44,48 @@ class TranscriptionDB:
             cols = [r[1] for r in conn.execute("PRAGMA table_info(transcriptions)").fetchall()]
             if "audio_path" not in cols:
                 conn.execute("ALTER TABLE transcriptions ADD COLUMN audio_path TEXT")
+            # M6: per-app usage + word_count for Insights
+            if "app" not in cols:
+                conn.execute("ALTER TABLE transcriptions ADD COLUMN app TEXT")
+            if "word_count" not in cols:
+                conn.execute("ALTER TABLE transcriptions ADD COLUMN word_count INTEGER")
+                for rid, txt in conn.execute("SELECT id, text FROM transcriptions").fetchall():
+                    conn.execute("UPDATE transcriptions SET word_count = ? WHERE id = ?",
+                                 (len((txt or "").split()), rid))
 
     def insert(self, text: str, language: str = None, duration_seconds: float = None,
-               model: str = "whisper-large-v3-turbo", audio_path: str = None) -> int:
+               model: str = "whisper-large-v3-turbo", audio_path: str = None,
+               app: str = None) -> int:
+        word_count = len((text or "").split())
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
-                "INSERT INTO transcriptions (text, language, duration_seconds, model, audio_path) VALUES (?, ?, ?, ?, ?)",
-                (text, language, duration_seconds, model, audio_path),
+                "INSERT INTO transcriptions (text, language, duration_seconds, model, audio_path, app, word_count) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (text, language, duration_seconds, model, audio_path, app, word_count),
             )
             return cursor.lastrowid
+
+    def insights(self) -> dict:
+        """Aggregate stats for the Insights page: totals, WPM, per-app, streak, per-day."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            t = conn.execute(
+                "SELECT COUNT(*) c, COALESCE(SUM(word_count),0) w, COALESCE(SUM(duration_seconds),0) s "
+                "FROM transcriptions"
+            ).fetchone()
+            count, words, seconds = t["c"], t["w"], t["s"]
+            wpm = (words / (seconds / 60.0)) if seconds and seconds > 0 else 0.0
+            per_app = [dict(r) for r in conn.execute(
+                "SELECT COALESCE(NULLIF(app,''),'(desconocida)') app, COUNT(*) n, COALESCE(SUM(word_count),0) w "
+                "FROM transcriptions GROUP BY 1 ORDER BY n DESC LIMIT 8"
+            ).fetchall()]
+            per_day = {r["d"]: r["n"] for r in conn.execute(
+                "SELECT date(created_at,'localtime') d, COUNT(*) n FROM transcriptions GROUP BY d"
+            ).fetchall()}
+        return {
+            "count": count, "words": words, "seconds": seconds, "wpm": wpm,
+            "per_app": per_app, "per_day": per_day, "streak": _compute_streak(per_day),
+        }
 
     def update_text(self, row_id: int, new_text: str):
         with sqlite3.connect(self.db_path) as conn:

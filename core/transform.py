@@ -4,7 +4,6 @@ user-configured prompt.
 No voice recording involved. User selects text, hits Option+N, gets the
 transform pasted back replacing the selection.
 """
-import os
 from groq import Groq
 from config import LLM_CLEANUP_MODEL, get_setting
 
@@ -24,7 +23,8 @@ class TransformHandler:
 
     def _get_client(self) -> Groq:
         if self._client is None:
-            key = os.getenv("GROQ_API_KEY", "")
+            from core.secrets import get_key
+            key = get_key("GROQ_API_KEY")
             if not key:
                 raise ValueError("GROQ_API_KEY not configured")
             self._client = Groq(api_key=key, timeout=10.0)

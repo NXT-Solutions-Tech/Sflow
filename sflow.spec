@@ -101,8 +101,9 @@ a = Analysis(
         'core.clipboard',
         'ui.pill_widget',
         'ui.audio_visualizer',
-        'ui.settings_dialog',
         'ui.red_dot_indicator',
+        'core.secrets',
+        'core.substitutions',
         'core.transcriber_parakeet',
         # Local STT stack (auto-descubierto por collect_all arriba)
         *mlx_hidden,

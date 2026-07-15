@@ -37,12 +37,19 @@ def _default_settings() -> dict:
         # latencia y privacidad segun benchmark M4 12-jul-2026). Fallback a groq si
         # el motor MLX no esta disponible en runtime.
         "stt_model": "whisper-turbo-local",
+        "stt_language": "auto",  # "auto" = autodeteccion (ES/EN/...); o codigo ISO como "es"/"en" para forzar
         "transcribe_backend": "groq",   # LEGACY — migrado a stt_model (ver load_settings)
-        "llm_cleanup_enabled": False,  # OFF por default: fidelidad > limpieza. Opt-in en Hub si se desea auto-puntuacion.
+        "auto_cleanup_level": "none",  # "none" | "light" | "medium" (M2 Auto Cleanup). none = sin LLM.
+        "llm_cleanup_enabled": False,  # LEGACY — migrado a auto_cleanup_level (ver load_settings).
         "llm_model": "llama-3.3-70b-versatile",  # modelo con mejor instruction-following (menos alucinaciones)
+        "llm_cleanup_provider": "groq",  # "groq" (Llama) | "openrouter" (GLM). Default groq = comportamiento actual, GLM es opt-in.
+        "openrouter_cleanup_model": "z-ai/glm-4.7-flash",  # slug OpenRouter para el proveedor GLM (verificar vigencia)
         "context_aware_tone": True,
         "smart_commands_enabled": True,
         "personal_dictionary_enabled": True,
+        "text_substitutions_enabled": True,  # "btw -> by the way" desde el diccionario (M3)
+        "input_device": "",  # "" = microfono predeterminado del sistema; si no, nombre exacto del dispositivo
+
         "liquid_glass_enabled": False,
         "streaming_paste_enabled": False,
         "mouse_button_hotkey": None,  # None | "middle" | "x1" | "x2"
@@ -83,6 +90,9 @@ def load_settings() -> dict:
             defaults["stt_model"] = (
                 "groq-turbo" if loaded["transcribe_backend"] == "groq" else "whisper-turbo-local"
             )
+        # --- Migracion legacy: llm_cleanup_enabled (bool) -> auto_cleanup_level ---
+        if "auto_cleanup_level" not in loaded and "llm_cleanup_enabled" in loaded:
+            defaults["auto_cleanup_level"] = "light" if loaded["llm_cleanup_enabled"] else "none"
         return defaults
     except Exception:
         return defaults
@@ -110,7 +120,22 @@ def set_setting(key: str, value):
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = "whisper-large-v3-turbo"
 LLM_CLEANUP_MODEL = "llama-3.3-70b-versatile"  # mejor fidelidad que 8b (~300-500ms vs 100-200ms)
-WHISPER_LANGUAGE = "es"
+WHISPER_LANGUAGE = "es"  # LEGACY: idioma historico. El STT ahora usa get_stt_language() (default autodeteccion).
+
+
+def get_stt_language():
+    """Codigo ISO de idioma para STT, o None para autodeteccion (setting 'stt_language'=='auto')."""
+    lang = (get_setting("stt_language", "auto") or "auto").strip().lower()
+    return None if lang == "auto" else lang
+
+# --- OpenRouter API (proveedor alternativo de limpieza LLM, default GLM) ---
+# Se activa poniendo llm_cleanup_provider="openrouter" (Ajustes). Fail-open: si no hay
+# key o la red falla, la transcripcion cruda se pega igual. El slug GLM puede cambiar
+# entre releases — verificar en https://openrouter.ai/models antes de empaquetar.
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_CLEANUP_MODEL = "z-ai/glm-4.7-flash"  # rapido y ~8x mas barato que glm-4.6, ideal para dictado
+OPENROUTER_TIMEOUT = 8.0
 
 # --- Catalogo de modelos STT seleccionables desde la app (Ajustes) ---
 # Benchmark M4 / 16GB / voz real es (12-jul-2026), latencia warm mediana + WER:
@@ -161,7 +186,7 @@ BLOCK_SIZE = 1024
 
 # --- UI ---
 PILL_WIDTH_IDLE = 34
-PILL_WIDTH_RECORDING = 100
+PILL_WIDTH_RECORDING = 112
 PILL_WIDTH_STATUS = 52
 PILL_HEIGHT = 34
 PILL_OPACITY = 0.90

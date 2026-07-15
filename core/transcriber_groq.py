@@ -1,7 +1,7 @@
 import io
-import os
 from groq import Groq
-from config import GROQ_MODEL, WHISPER_LANGUAGE
+from config import GROQ_MODEL, get_stt_language
+from core.secrets import get_key
 
 
 _HALLUCINATION_MARKERS = (
@@ -40,7 +40,7 @@ class GroqTranscriber:
 
     def _get_client(self) -> Groq:
         if self._client is None:
-            key = os.getenv("GROQ_API_KEY", "")
+            key = get_key("GROQ_API_KEY")
             if not key:
                 raise ValueError("GROQ_API_KEY not configured")
             self._client = Groq(api_key=key, timeout=10.0)
@@ -54,10 +54,12 @@ class GroqTranscriber:
         kwargs = dict(
             file=("recording.wav", data),
             model=GROQ_MODEL,
-            language=WHISPER_LANGUAGE,
             response_format="text",
             temperature=0.0,
         )
+        lang = get_stt_language()
+        if lang:  # None = autodeteccion → omitir el parametro
+            kwargs["language"] = lang
         if vocabulary_prompt:
             kwargs["prompt"] = vocabulary_prompt
         transcription = self._get_client().audio.transcriptions.create(**kwargs)

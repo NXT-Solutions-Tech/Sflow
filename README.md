@@ -55,8 +55,8 @@ Built as a replacement for [Wispr Flow](https://wispr.com) ($15/month). SFlow us
 git clone https://github.com/daniel-carreon/sflow.git
 cd sflow
 
-# System dependency
-brew install portaudio
+# System dependencies (portaudio = audio capture, ffmpeg = local STT audio decode)
+brew install portaudio ffmpeg
 
 # Python environment
 python3 -m venv venv
@@ -78,7 +78,7 @@ Open SFlow from Spotlight or `/Applications`. On first launch it asks for your [
 ```bash
 git clone https://github.com/daniel-carreon/sflow.git
 cd sflow
-brew install portaudio
+brew install portaudio ffmpeg
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -86,6 +86,19 @@ cp .env.example .env
 # Edit .env and paste your GROQ_API_KEY
 python3 main.py
 ```
+
+### LLM cleanup provider (optional)
+
+The optional transcript cleanup (fillers removed, punctuation fixed) can run through
+either provider, selectable in **Ajustes → Procesamiento con LLM → Proveedor de limpieza**:
+
+- **Groq · Llama** — default, uses your existing `GROQ_API_KEY`.
+- **OpenRouter · GLM** — set `OPENROUTER_API_KEY` in `.env` (get one at
+  [openrouter.ai/keys](https://openrouter.ai/keys)); defaults to the `z-ai/glm-4.7-flash` model.
+
+Both are **fail-open**: if the network, key, or model errors out, SFlow pastes the raw
+transcript instead of blocking. In a packaged `.app`, `.env` lives at
+`~/Library/Application Support/SFlow/.env`.
 
 ---
 
@@ -198,6 +211,7 @@ GROQ_MODEL = "whisper-large-v3-turbo"  # fastest Groq model
 | Pill doesn't appear | Grant Accessibility permission to your terminal |
 | Pill steals focus | Verify PyObjC installed: `pip install pyobjc-framework-Cocoa` |
 | Audio not captured | Check Microphone permissions + `brew list portaudio` |
+| Records but no text / `ffmpeg` error in `sflow.log` | Local STT needs ffmpeg: `brew install ffmpeg`, then restart |
 | Paste goes to wrong app | This is the focus-steal issue — ensure PyObjC native setup works |
 | Ctrl+C doesn't quit | Should work out of the box (SIGINT handler). Try `kill %1` |
 | Dashboard not loading | Port auto-selects from 5678: `lsof -i :5678` |

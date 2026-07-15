@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QScrollArea, QFrame, QStackedWidget, QListWidget, QListWidgetItem,
     QMenu, QPlainTextEdit, QGroupBox, QCheckBox, QComboBox, QDialog,
-    QApplication, QMessageBox, QSizePolicy, QFileDialog,
+    QApplication, QMessageBox, QSizePolicy, QFileDialog, QTabWidget,
 )
 from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
 from PyQt6.QtGui import QIcon, QAction, QPixmap, QFont, QPainter, QColor, QPen
@@ -18,8 +18,10 @@ from db.snippets import SnippetsDB
 from core.paste import paste_last_transcript
 from core.relaunch import relaunch_app
 from config import (
-    LOGO_PATH, DICTIONARY_PATH, get_setting, set_setting,
+    LOGO_PATH, DICTIONARY_PATH, get_setting, set_setting, STT_MODELS,
 )
+from core.recorder import list_input_devices
+from core.secrets import set_key, key_source
 import os
 import subprocess
 
@@ -489,7 +491,7 @@ class DictionaryPage(QWidget):
         title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
         root.addWidget(title)
 
-        sub = QLabel("Una palabra o frase por línea. Se usa como pista de vocabulario para Whisper — mejora reconocimiento de nombres propios, términos técnicos, jerga.")
+        sub = QLabel("Una palabra o frase por línea (pista de vocabulario para Whisper: nombres, jerga, términos técnicos).\nPara sustituciones automáticas de texto usa una flecha:  btw -> by the way")
         sub.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
         sub.setWordWrap(True)
         root.addWidget(sub)
@@ -740,7 +742,35 @@ class SettingsPage(QWidget):
         title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
         root.addWidget(title)
 
-        def group(name: str) -> QVBoxLayout:
+        tabs = QTabWidget()
+        tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border: none; }}
+            QTabBar::tab {{
+                background: transparent; color: {C.TEXT_DIM};
+                padding: 8px 18px; margin-right: 2px; border: none;
+                border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500;
+            }}
+            QTabBar::tab:selected {{ color: {C.TEXT}; border-bottom: 2px solid {C.ACCENT}; }}
+            QTabBar::tab:hover {{ color: {C.TEXT}; }}
+        """)
+        _general = QWidget(); gen = QVBoxLayout(_general)
+        gen.setContentsMargins(2, 12, 2, 2); gen.setSpacing(14)
+        gen.setAlignment(Qt.AlignmentFlag.AlignTop)
+        _system = QWidget(); sysl = QVBoxLayout(_system)
+        sysl.setContentsMargins(2, 12, 2, 2); sysl.setSpacing(14)
+        sysl.setAlignment(Qt.AlignmentFlag.AlignTop)
+        def _scrolled(inner_widget):
+            sa = QScrollArea()
+            sa.setWidgetResizable(True)
+            sa.setFrameShape(QFrame.Shape.NoFrame)
+            sa.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+            sa.setWidget(inner_widget)
+            return sa
+        tabs.addTab(_scrolled(_general), "General")
+        tabs.addTab(_scrolled(_system), "System")
+        root.addWidget(tabs, 1)
+
+        def group(name, target) -> QVBoxLayout:
             g = QGroupBox(name)
             g.setStyleSheet(f"""
                 QGroupBox {{
@@ -774,72 +804,131 @@ class SettingsPage(QWidget):
                 }}
             """)
             inner = QVBoxLayout()
-            inner.setContentsMargins(14, 4, 14, 10)
-            inner.setSpacing(2)
+            inner.setContentsMargins(14, 8, 14, 10)
+            inner.setSpacing(6)
             g.setLayout(inner)
-            root.addWidget(g)
+            target.addWidget(g)
             return inner
 
-        # --- Transcription ---
-        tl = group("Motor de transcripción")
-        self.backend = QComboBox()
-        self.backend.addItem("Groq Whisper Turbo — cloud, 500-800ms E2E, requiere internet", "groq")
-        self.backend.addItem("mlx-whisper (small) — offline, ~1s por 10s audio, `pip install mlx-whisper`", "local")
-        self.backend.setCurrentIndex(0 if get_setting("transcribe_backend", "groq") == "groq" else 1)
-        tl.addWidget(self.backend)
+        def dim(text):
+            lb = QLabel(text)
+            lb.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; margin-top: 2px;")
+            return lb
 
-        # --- Paste ---
-        pl = group("Inserción de texto")
-        self.paste_combo = QComboBox()
-        self.paste_combo.addItem("Keystroke injection — NO toca tu portapapeles (default)", "keystroke")
-        self.paste_combo.addItem("Clipboard + Cmd+V — legacy, sobrescribe tu portapapeles temporalmente", "clipboard")
-        self.paste_combo.setCurrentIndex(0 if get_setting("paste_backend", "keystroke") == "keystroke" else 1)
-        pl.addWidget(self.paste_combo)
+        _input_qss = (
+            f"background: {C.BG_INPUT}; color: {C.TEXT}; border: 1px solid {C.DIVIDER};"
+            f" border-radius: 6px; padding: 7px 10px; font-size: 13px;"
+        )
 
-        self.streaming = QCheckBox("Streaming paste (efecto typing palabra-por-palabra)")
-        self.streaming.setChecked(get_setting("streaming_paste_enabled", False))
-        pl.addWidget(self.streaming)
+        # ============ GENERAL ============
+        tl = group("Transcripción", gen)
+        tl.addWidget(dim("Modelo de transcripción"))
+        self.model_combo = QComboBox()
+        for m in STT_MODELS:
+            self.model_combo.addItem(m["label"], m["id"])
+        self.model_combo.setCurrentIndex(max(0, self.model_combo.findData(get_setting("stt_model", "whisper-turbo-local"))))
+        tl.addWidget(self.model_combo)
 
-        # --- AI cleanup ---
-        al = group("Procesamiento con LLM")
-        self.llm = QCheckBox("Limpiar con Llama (remueve muletillas, puntúa)")
-        self.llm.setChecked(get_setting("llm_cleanup_enabled", True))
-        al.addWidget(self.llm)
+        tl.addWidget(dim("Idioma del dictado"))
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItem("Auto — detecta ES/EN automáticamente", "auto")
+        self.lang_combo.addItem("Español", "es")
+        self.lang_combo.addItem("English", "en")
+        self.lang_combo.setCurrentIndex(max(0, self.lang_combo.findData(get_setting("stt_language", "auto"))))
+        tl.addWidget(self.lang_combo)
 
-        self.context = QCheckBox("Adaptar tono según app activa (Slack casual, Gmail formal, etc.)")
+        tl.addWidget(dim("Micrófono / entrada de audio"))
+        self.mic_combo = QComboBox()
+        self.mic_combo.addItem("Predeterminado del sistema", "")
+        for d in list_input_devices():
+            self.mic_combo.addItem(d["name"], d["name"])
+        self.mic_combo.setCurrentIndex(max(0, self.mic_combo.findData(get_setting("input_device", "") or "")))
+        tl.addWidget(self.mic_combo)
+
+        al = group("Auto Cleanup", gen)
+        al.addWidget(dim("Nivel de limpieza"))
+        self.cleanup_combo = QComboBox()
+        self.cleanup_combo.addItem("None — sin limpieza, texto verbatim", "none")
+        self.cleanup_combo.addItem("Light — muletillas + puntuación", "light")
+        self.cleanup_combo.addItem("Medium — claridad + concisión", "medium")
+        self.cleanup_combo.setCurrentIndex(max(0, self.cleanup_combo.findData(get_setting("auto_cleanup_level", "none"))))
+        al.addWidget(self.cleanup_combo)
+
+        al.addWidget(dim("Proveedor de limpieza"))
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItem("Groq · Llama (nube)", "groq")
+        self.provider_combo.addItem("OpenRouter · GLM (nube)", "openrouter")
+        self.provider_combo.setCurrentIndex(max(0, self.provider_combo.findData(get_setting("llm_cleanup_provider", "groq"))))
+        al.addWidget(self.provider_combo)
+
+        self.context = QCheckBox("Adaptar tono según la app activa (Slack casual, Gmail formal…)")
         self.context.setChecked(get_setting("context_aware_tone", True))
         al.addWidget(self.context)
 
+        xl = group("Texto", gen)
         self.commands = QCheckBox("Comandos de voz (\"nueva línea\", \"punto y aparte\", \"coma\")")
         self.commands.setChecked(get_setting("smart_commands_enabled", True))
-        al.addWidget(self.commands)
-
+        xl.addWidget(self.commands)
         self.dict_toggle = QCheckBox("Usar diccionario personal como vocabulario")
         self.dict_toggle.setChecked(get_setting("personal_dictionary_enabled", True))
-        al.addWidget(self.dict_toggle)
+        xl.addWidget(self.dict_toggle)
+        self.subs_toggle = QCheckBox("Sustituciones de texto (btw → by the way)")
+        self.subs_toggle.setChecked(get_setting("text_substitutions_enabled", True))
+        xl.addWidget(self.subs_toggle)
 
-        # --- UX ---
-        ul = group("UX")
-        self.glass = QCheckBox("Liquid Glass en la pill (experimental — macOS 26+)")
-        self.glass.setChecked(get_setting("liquid_glass_enabled", False))
-        ul.addWidget(self.glass)
+        # ============ SYSTEM ============
+        pl = group("Inserción de texto", sysl)
+        pl.addWidget(dim("Método de pegado"))
+        self.paste_combo = QComboBox()
+        self.paste_combo.addItem("Keystroke — no toca tu portapapeles (recomendado)", "keystroke")
+        self.paste_combo.addItem("Clipboard + Cmd+V — sobrescribe el portapapeles", "clipboard")
+        self.paste_combo.setCurrentIndex(0 if get_setting("paste_backend", "keystroke") == "keystroke" else 1)
+        pl.addWidget(self.paste_combo)
+        self.streaming = QCheckBox("Streaming paste (typing palabra-por-palabra)")
+        self.streaming.setChecked(get_setting("streaming_paste_enabled", False))
+        pl.addWidget(self.streaming)
 
+        snd = group("Sonido", sysl)
+        self.sound_start = QCheckBox("Sonido al empezar a dictar")
+        self.sound_start.setChecked(get_setting("sound_on_start", False))
+        snd.addWidget(self.sound_start)
+        self.sound_done = QCheckBox("Sonido al terminar")
+        self.sound_done.setChecked(get_setting("sound_on_done", False))
+        snd.addWidget(self.sound_done)
+
+        bl = group("Comportamiento", sysl)
         self.command_mode = QCheckBox("Command Mode (Ctrl+Shift hold → transforma selección con voz)")
         self.command_mode.setChecked(get_setting("command_mode_enabled", True))
-        ul.addWidget(self.command_mode)
+        bl.addWidget(self.command_mode)
+        self.focus_mode = QCheckBox("Focus Mode (silencia apps distractoras al dictar)")
+        self.focus_mode.setChecked(get_setting("focus_mode_enabled", False))
+        bl.addWidget(self.focus_mode)
+        self.save_audio = QCheckBox("Guardar audio para re-transcribir (historial)")
+        self.save_audio.setChecked(get_setting("save_audio_for_retry", True))
+        bl.addWidget(self.save_audio)
+        self.glass = QCheckBox("Liquid Glass en la pill (experimental — macOS 26+)")
+        self.glass.setChecked(get_setting("liquid_glass_enabled", False))
+        bl.addWidget(self.glass)
 
-        # --- Mouse hotkey ---
-        hl = group("Hotkey de mouse (opcional)")
+        hl = group("Hotkey de mouse (opcional)", sysl)
         self.mouse = QComboBox()
         self.mouse.addItem("Ninguno", "")
         self.mouse.addItem("Click medio (rueda)", "middle")
         self.mouse.addItem("Botón lateral 1 (Mouse4)", "x1")
         self.mouse.addItem("Botón lateral 2 (Mouse5)", "x2")
-        cur = get_setting("mouse_button_hotkey") or ""
-        self.mouse.setCurrentIndex(max(0, self.mouse.findData(cur)))
+        self.mouse.setCurrentIndex(max(0, self.mouse.findData(get_setting("mouse_button_hotkey") or "")))
         hl.addWidget(self.mouse)
 
-        root.addStretch()
+        kl = group("API Keys · macOS Keychain", sysl)
+        kl.addWidget(dim("Groq API Key (STT en la nube + limpieza Llama)"))
+        self.groq_key = QLineEdit(); self.groq_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.groq_key.setPlaceholderText(self._key_status("GROQ_API_KEY")); self.groq_key.setStyleSheet(_input_qss)
+        kl.addWidget(self.groq_key)
+        kl.addWidget(dim("OpenRouter API Key (limpieza GLM)"))
+        self.or_key = QLineEdit(); self.or_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.or_key.setPlaceholderText(self._key_status("OPENROUTER_API_KEY")); self.or_key.setStyleSheet(_input_qss)
+        kl.addWidget(self.or_key)
+        kl.addWidget(dim("Se guardan en el Keychain de macOS. Deja en blanco para conservar la actual."))
 
         # Save bar
         bar = QHBoxLayout()
@@ -878,13 +967,22 @@ class SettingsPage(QWidget):
 
         self.setLayout(root)
 
+    @staticmethod
+    def _key_status(name: str) -> str:
+        """Placeholder text reflecting where the key lives — never the value."""
+        return {
+            "keychain": "•••••••• (guardada en Keychain)",
+            "env": "•••••••• (desde .env)",
+            "none": "no configurada",
+        }[key_source(name)]
+
     def _restart_snapshot(self) -> tuple:
         """Settings that only take effect after restart. If any change → offer relaunch."""
         return (
             get_setting("mouse_button_hotkey"),
             get_setting("liquid_glass_enabled", False),
             get_setting("command_mode_enabled", True),
-            get_setting("transcribe_backend", "groq"),
+            get_setting("stt_model", "whisper-turbo-local"),
         )
 
     def _relaunch(self):
@@ -898,17 +996,32 @@ class SettingsPage(QWidget):
             relaunch_app()
 
     def _save(self):
-        set_setting("transcribe_backend", self.backend.currentData())
-        set_setting("paste_backend", self.paste_combo.currentData())
-        set_setting("streaming_paste_enabled", self.streaming.isChecked())
-        set_setting("llm_cleanup_enabled", self.llm.isChecked())
+        set_setting("stt_model", self.model_combo.currentData())
+        set_setting("stt_language", self.lang_combo.currentData())
+        set_setting("input_device", self.mic_combo.currentData())
+        set_setting("auto_cleanup_level", self.cleanup_combo.currentData())
+        set_setting("llm_cleanup_provider", self.provider_combo.currentData())
         set_setting("context_aware_tone", self.context.isChecked())
         set_setting("smart_commands_enabled", self.commands.isChecked())
         set_setting("personal_dictionary_enabled", self.dict_toggle.isChecked())
-        set_setting("liquid_glass_enabled", self.glass.isChecked())
+        set_setting("text_substitutions_enabled", self.subs_toggle.isChecked())
+        set_setting("paste_backend", self.paste_combo.currentData())
+        set_setting("streaming_paste_enabled", self.streaming.isChecked())
+        set_setting("sound_on_start", self.sound_start.isChecked())
+        set_setting("sound_on_done", self.sound_done.isChecked())
         set_setting("command_mode_enabled", self.command_mode.isChecked())
+        set_setting("focus_mode_enabled", self.focus_mode.isChecked())
+        set_setting("save_audio_for_retry", self.save_audio.isChecked())
+        set_setting("liquid_glass_enabled", self.glass.isChecked())
         mb = self.mouse.currentData()
         set_setting("mouse_button_hotkey", mb if mb else None)
+        # API keys → Keychain (only when the user typed a new value)
+        if self.groq_key.text().strip():
+            set_key("GROQ_API_KEY", self.groq_key.text().strip())
+            self.groq_key.clear(); self.groq_key.setPlaceholderText(self._key_status("GROQ_API_KEY"))
+        if self.or_key.text().strip():
+            set_key("OPENROUTER_API_KEY", self.or_key.text().strip())
+            self.or_key.clear(); self.or_key.setPlaceholderText(self._key_status("OPENROUTER_API_KEY"))
 
         new_snapshot = self._restart_snapshot()
         needs_restart = new_snapshot != self._snapshot
@@ -925,6 +1038,235 @@ class SettingsPage(QWidget):
                 relaunch_app()
         else:
             QMessageBox.information(self, "Guardado", "Ajustes guardados.")
+
+
+class InsightsPage(QWidget):
+    """Usage analytics — total words, WPM, streak, per-app breakdown, activity."""
+
+    def __init__(self, db: TranscriptionDB):
+        super().__init__()
+        self.db = db
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(28, 22, 28, 16)
+        outer.setSpacing(16)
+        title = QLabel("Insights")
+        title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
+        outer.addWidget(title)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self._body_host = QWidget()
+        self.body = QVBoxLayout(self._body_host)
+        self.body.setContentsMargins(0, 0, 8, 0)
+        self.body.setSpacing(16)
+        self.body.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._scroll.setWidget(self._body_host)
+        outer.addWidget(self._scroll, 1)
+
+    @staticmethod
+    def _clear(layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+            elif item.layout() is not None:
+                InsightsPage._clear(item.layout())
+
+    def _stat_card(self, value: str, label: str) -> QFrame:
+        card = QFrame()
+        card.setStyleSheet(f"QFrame {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(16, 14, 16, 14)
+        cl.setSpacing(4)
+        v = QLabel(value)
+        v.setStyleSheet(f"color: {C.TEXT}; font-size: 26px; font-weight: 700;")
+        lb = QLabel(label)
+        lb.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
+        cl.addWidget(v)
+        cl.addWidget(lb)
+        return card
+
+    def _section(self, name: str) -> QVBoxLayout:
+        box = QFrame()
+        box.setStyleSheet(f"QFrame {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
+        inner = QVBoxLayout(box)
+        inner.setContentsMargins(16, 14, 16, 14)
+        inner.setSpacing(10)
+        header = QLabel(name)
+        header.setStyleSheet(f"color: {C.TEXT}; font-size: 14px; font-weight: 600; border: none;")
+        inner.addWidget(header)
+        self.body.addWidget(box)
+        return inner
+
+    def reload(self):
+        self._clear(self.body)
+        d = self.db.insights()
+
+        cards = QHBoxLayout()
+        cards.setSpacing(12)
+        cards.addWidget(self._stat_card(f"{d['words']:,}", "Palabras totales"))
+        cards.addWidget(self._stat_card(f"{round(d['wpm'])}", "Palabras / minuto"))
+        cards.addWidget(self._stat_card(f"{d['count']:,}", "Dictados"))
+        cards.addWidget(self._stat_card(f"{d['streak']}", "Racha (días)"))
+        self.body.addLayout(cards)
+
+        # Per-app usage bars
+        sec = self._section("Uso por app")
+        per_app = d["per_app"]
+        if not per_app:
+            empty = QLabel("Aún no hay dictados. Dicta algo con Ctrl+Alt.")
+            empty.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; border: none;")
+            sec.addWidget(empty)
+        else:
+            maxn = max(a["n"] for a in per_app) or 1
+            for a in per_app:
+                row = QHBoxLayout()
+                row.setSpacing(10)
+                name = QLabel(a["app"])
+                name.setFixedWidth(150)
+                name.setStyleSheet(f"color: {C.TEXT}; font-size: 12px; border: none;")
+                row.addWidget(name)
+                track = QFrame()
+                track.setFixedHeight(10)
+                track.setStyleSheet(f"background: {C.BG_INPUT}; border-radius: 5px;")
+                tl = QHBoxLayout(track)
+                tl.setContentsMargins(0, 0, 0, 0)
+                fill = QFrame()
+                fill.setStyleSheet(f"background: {C.ACCENT}; border-radius: 5px;")
+                tl.addWidget(fill, max(1, round(100 * a["n"] / maxn)))
+                spacer = QFrame()
+                spacer.setStyleSheet("background: transparent;")
+                tl.addWidget(spacer, max(0, 100 - round(100 * a["n"] / maxn)))
+                row.addWidget(track, 1)
+                cnt = QLabel(str(a["n"]))
+                cnt.setFixedWidth(40)
+                cnt.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; border: none;")
+                cnt.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                row.addWidget(cnt)
+                sec.addLayout(row)
+
+        # Activity strip — last 21 days
+        act = self._section("Actividad (últimos 21 días)")
+        strip = QHBoxLayout()
+        strip.setSpacing(4)
+        per_day = d["per_day"]
+        from datetime import date, timedelta
+        today = date.today()
+        vals = [per_day.get((today - timedelta(days=i)).isoformat(), 0) for i in range(20, -1, -1)]
+        mx = max(vals) or 1
+        for n in vals:
+            sq = QFrame()
+            sq.setFixedSize(13, 13)
+            if n == 0:
+                sq.setStyleSheet(f"background: {C.BG_INPUT}; border-radius: 3px;")
+            else:
+                alpha = 90 + int(165 * min(1.0, n / mx))
+                sq.setStyleSheet(f"background: rgba(74,143,239,{alpha}); border-radius: 3px;")
+            strip.addWidget(sq)
+        strip.addStretch()
+        act.addLayout(strip)
+
+
+class TransformsPage(QWidget):
+    """Edit the 8 Opt+1…8 rewrite prompts (were only editable via settings.json)."""
+
+    def __init__(self):
+        super().__init__()
+        _inp = (f"background: {C.BG_INPUT}; color: {C.TEXT}; border: 1px solid {C.DIVIDER};"
+                f" border-radius: 6px; padding: 7px 10px; font-size: 13px;")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(28, 22, 28, 16)
+        outer.setSpacing(12)
+
+        title = QLabel("Transforms")
+        title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
+        outer.addWidget(title)
+        sub = QLabel("Reescrituras con IA sobre el texto seleccionado. Selecciona texto y aplica con ⌥+1…8.")
+        sub.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
+        sub.setWordWrap(True)
+        outer.addWidget(sub)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        inner = QWidget()
+        il = QVBoxLayout(inner)
+        il.setContentsMargins(0, 4, 8, 4)
+        il.setSpacing(10)
+        il.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self._rows = []
+        prompts = get_setting("transform_prompts", [])
+        for i in range(8):
+            p = prompts[i] if i < len(prompts) else {"label": "", "prompt": ""}
+            card = QFrame()
+            card.setStyleSheet(f"QFrame {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 10px; }}")
+            cl = QVBoxLayout(card)
+            cl.setContentsMargins(14, 12, 14, 12)
+            cl.setSpacing(8)
+            head = QHBoxLayout()
+            badge = QLabel(f"⌥ {i+1}")
+            badge.setStyleSheet(f"color: {C.TEXT}; background: {C.BG_INPUT}; border: 1px solid {C.DIVIDER};"
+                                f" border-radius: 6px; padding: 3px 9px; font-size: 12px; font-weight: 600;")
+            head.addWidget(badge)
+            le = QLineEdit(p.get("label", ""))
+            le.setPlaceholderText("Nombre del transform")
+            le.setStyleSheet(_inp)
+            head.addWidget(le, 1)
+            cl.addLayout(head)
+            pe = QPlainTextEdit(p.get("prompt", ""))
+            pe.setPlaceholderText("Instrucción para el LLM (ej: Reescribe este texto de forma más concisa…)")
+            pe.setFixedHeight(60)
+            pe.setStyleSheet(f"QPlainTextEdit {{ background: {C.BG_INPUT}; color: {C.TEXT};"
+                             f" border: 1px solid {C.DIVIDER}; border-radius: 6px; padding: 6px 8px; font-size: 13px; }}")
+            cl.addWidget(pe)
+            il.addWidget(card)
+            self._rows.append((le, pe))
+
+        scroll.setWidget(inner)
+        outer.addWidget(scroll, 1)
+
+        bar = QHBoxLayout()
+        reset = QPushButton("Restaurar predeterminados")
+        reset.setCursor(Qt.CursorShape.PointingHandCursor)
+        reset.setStyleSheet(f"""
+            QPushButton {{ background: {C.BG_INPUT}; color: {C.TEXT}; border: 1px solid {C.DIVIDER};
+                border-radius: 8px; padding: 10px 18px; font-weight: 500; font-size: 13px; }}
+            QPushButton:hover {{ background: {C.BG_HOVER}; }}
+        """)
+        reset.clicked.connect(self._reset)
+        bar.addWidget(reset)
+        bar.addStretch()
+        save = QPushButton("Guardar transforms")
+        save.setCursor(Qt.CursorShape.PointingHandCursor)
+        save.setStyleSheet(f"""
+            QPushButton {{ background: {C.ACCENT}; color: white; border: none;
+                border-radius: 8px; padding: 10px 24px; font-weight: 500; font-size: 13px; }}
+            QPushButton:hover {{ background: #4a8fef; }}
+        """)
+        save.clicked.connect(self._save)
+        bar.addWidget(save)
+        outer.addLayout(bar)
+
+    def _save(self):
+        prompts = [
+            {"label": le.text().strip() or f"Transform {i+1}", "prompt": pe.toPlainText().strip()}
+            for i, (le, pe) in enumerate(self._rows)
+        ]
+        set_setting("transform_prompts", prompts)
+        QMessageBox.information(self, "Guardado", "Transforms actualizados. ⌥+1…8 usan los nuevos prompts.")
+
+    def _reset(self):
+        from config import _default_settings
+        defaults = _default_settings().get("transform_prompts", [])
+        for i, (le, pe) in enumerate(self._rows):
+            d = defaults[i] if i < len(defaults) else {"label": "", "prompt": ""}
+            le.setText(d.get("label", ""))
+            pe.setPlainText(d.get("prompt", ""))
 
 
 class HomePage(QWidget):
@@ -1067,11 +1409,13 @@ class HubWindow(QWidget):
         sl.addSpacing(18)
 
         self.btn_home = SidebarButton("🏠", "Home")
+        self.btn_insights = SidebarButton("📊", "Insights")
         self.btn_hist = SidebarButton("🕐", "Historial")
         self.btn_dict = SidebarButton("📖", "Diccionario")
         self.btn_snip = SidebarButton("✨", "Snippets")
+        self.btn_trans = SidebarButton("🪄", "Transforms")
         self.btn_set = SidebarButton("⚙️", "Ajustes")
-        for b in (self.btn_home, self.btn_hist, self.btn_dict, self.btn_snip, self.btn_set):
+        for b in (self.btn_home, self.btn_insights, self.btn_hist, self.btn_dict, self.btn_snip, self.btn_trans, self.btn_set):
             sl.addWidget(b)
         sl.addStretch()
         self.btn_home.setChecked(True)
@@ -1080,30 +1424,38 @@ class HubWindow(QWidget):
         # Pages
         self.pages = QStackedWidget()
         self.home_page = HomePage(db)
+        self.insights_page = InsightsPage(db)
         self.history_page = HistoryPage(db)
         self.dict_page = DictionaryPage()
         self.snippets_page = SnippetsPage()
+        self.transforms_page = TransformsPage()
         self.settings_page = SettingsPage()
         self.pages.addWidget(self.home_page)
+        self.pages.addWidget(self.insights_page)
         self.pages.addWidget(self.history_page)
         self.pages.addWidget(self.dict_page)
         self.pages.addWidget(self.snippets_page)
+        self.pages.addWidget(self.transforms_page)
         self.pages.addWidget(self.settings_page)
         root.addWidget(self.pages, 1)
 
         self.btn_home.clicked.connect(lambda: self._go(0))
-        self.btn_hist.clicked.connect(lambda: self._go(1))
-        self.btn_dict.clicked.connect(lambda: self._go(2))
-        self.btn_snip.clicked.connect(lambda: self._go(3))
-        self.btn_set.clicked.connect(lambda: self._go(4))
+        self.btn_insights.clicked.connect(lambda: self._go(1))
+        self.btn_hist.clicked.connect(lambda: self._go(2))
+        self.btn_dict.clicked.connect(lambda: self._go(3))
+        self.btn_snip.clicked.connect(lambda: self._go(4))
+        self.btn_trans.clicked.connect(lambda: self._go(5))
+        self.btn_set.clicked.connect(lambda: self._go(6))
 
     def _go(self, idx: int):
         self.pages.setCurrentIndex(idx)
         if idx == 0:
             self.home_page.reload()
         elif idx == 1:
+            self.insights_page.reload()
+        elif idx == 2:
             self.history_page.reload()
-        elif idx == 3:
+        elif idx == 4:
             self.snippets_page.reload()
 
     def showEvent(self, event):
