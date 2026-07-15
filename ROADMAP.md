@@ -72,11 +72,10 @@ dictating/processing, then fades out and is fully hidden. No persistent idle pil
   Cleanup Light≠Medium via real LLM; substitutions; Keychain roundtrip; insights math
   (WPM/per-app/streak + legacy backfill); dashboard via Playwright. UI previews rendered
   (settings General/System, Transforms, Insights) — clean/minimalist.
-- **Needs on-device acceptance (can't be done headless):** run `python3 main.py` and check
-  in the real GUI: (a) new tabbed Settings (General/System) saves + API-key→Keychain;
-  (b) Transforms editor persists ⌥1–8; (c) Insights shows real per-app data after a few
-  dictations; (d) Auto Cleanup None/Light/Medium behavior end-to-end; (e) substitutions
-  ("btw → by the way") in a real dictation. Then **package**: `bash build.sh`.
+- **On-device acceptance — ACCEPTED by user (2026-07-15):** ran `python3 main.py`, migration
+  applied to real history with no traceback, and all new GUI surfaces (tabbed Settings +
+  Keychain, Transforms editor, Insights, Auto Cleanup levels, substitutions) approved.
+  **All six milestones complete and accepted.** Remaining step: package via `bash build.sh`.
 - **Deferred (noted):** raw-text preservation for "undo AI edit" (Wispr parity) — deferred
   from M2 to a future pass; dashboard footer still says "Groq Whisper" (cosmetic).
 - **Open decision:** none blocking.
