@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from config import get_setting, set_setting, DICTIONARY_PATH, STT_MODELS
+from core.recorder import list_input_devices
 import os
 import subprocess
 
@@ -34,6 +35,21 @@ class SettingsDialog(QDialog):
         )
         hint.setStyleSheet("color: gray; font-size: 11px;")
         bl.addWidget(hint)
+
+        # Selector de micrófono / dispositivo de entrada
+        bl.addSpacing(6)
+        bl.addWidget(QLabel("Micrófono / entrada de audio:"))
+        self.mic_combo = QComboBox()
+        self.mic_combo.addItem("Predeterminado del sistema", "")
+        for d in list_input_devices():
+            self.mic_combo.addItem(d["name"], d["name"])
+        cur_mic = get_setting("input_device", "") or ""
+        self.mic_combo.setCurrentIndex(max(0, self.mic_combo.findData(cur_mic)))
+        bl.addWidget(self.mic_combo)
+        mic_hint = QLabel("Aplica en el próximo dictado. Si el dispositivo se desconecta, usa el predeterminado.")
+        mic_hint.setStyleSheet("color: gray; font-size: 11px;")
+        bl.addWidget(mic_hint)
+
         backend_group.setLayout(bl)
         root.addWidget(backend_group)
 
@@ -141,6 +157,7 @@ class SettingsDialog(QDialog):
 
     def _save(self):
         set_setting("stt_model", self.model_combo.currentData())
+        set_setting("input_device", self.mic_combo.currentData())
         set_setting("llm_cleanup_enabled", self.cb_llm.isChecked())
         set_setting("llm_cleanup_provider", self.provider_combo.currentData())
         set_setting("context_aware_tone", self.cb_context.isChecked())

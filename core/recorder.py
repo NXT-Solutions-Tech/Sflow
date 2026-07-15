@@ -4,7 +4,31 @@ import queue
 import time
 import numpy as np
 import sounddevice as sd
-from config import SAMPLE_RATE, CHANNELS, AUDIO_DTYPE, BLOCK_SIZE
+from config import SAMPLE_RATE, CHANNELS, AUDIO_DTYPE, BLOCK_SIZE, get_setting
+
+
+def list_input_devices() -> list[dict]:
+    """Dispositivos con canales de entrada: [{'index': int, 'name': str}]."""
+    devices = []
+    try:
+        for i, d in enumerate(sd.query_devices()):
+            if d.get("max_input_channels", 0) > 0:
+                devices.append({"index": i, "name": d["name"]})
+    except Exception:
+        pass
+    return devices
+
+
+def _resolve_input_device():
+    """Traduce el setting 'input_device' (nombre) a un index de sounddevice.
+    Devuelve None (= predeterminado del sistema) si esta vacio o no se encuentra."""
+    name = (get_setting("input_device", "") or "").strip()
+    if not name:
+        return None
+    for d in list_input_devices():
+        if d["name"] == name:
+            return d["index"]
+    return None  # dispositivo desconectado -> caer al predeterminado (fail-safe)
 
 
 class AudioRecorder:
@@ -31,14 +55,29 @@ class AudioRecorder:
                 break
         self.is_recording = True
         self._start_time = time.time()
-        self.stream = sd.InputStream(
-            samplerate=SAMPLE_RATE,
-            channels=CHANNELS,
-            dtype=AUDIO_DTYPE,
-            blocksize=BLOCK_SIZE,
-            callback=self._callback,
-        )
-        self.stream.start()
+
+        def _open(device):
+            return sd.InputStream(
+                samplerate=SAMPLE_RATE,
+                channels=CHANNELS,
+                dtype=AUDIO_DTYPE,
+                blocksize=BLOCK_SIZE,
+                callback=self._callback,
+                device=device,
+            )
+
+        device = _resolve_input_device()
+        try:
+            self.stream = _open(device)
+            self.stream.start()
+        except Exception as e:
+            # Dispositivo elegido no disponible/incompatible -> predeterminado (nunca bloquea).
+            if device is not None:
+                print(f"Audio device {device!r} fallo ({e}); usando predeterminado")
+                self.stream = _open(None)
+                self.stream.start()
+            else:
+                raise
 
     def stop(self) -> float:
         """Stop recording and return duration in seconds."""

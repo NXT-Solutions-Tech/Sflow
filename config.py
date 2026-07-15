@@ -45,6 +45,8 @@ def _default_settings() -> dict:
         "context_aware_tone": True,
         "smart_commands_enabled": True,
         "personal_dictionary_enabled": True,
+        "input_device": "",  # "" = microfono predeterminado del sistema; si no, nombre exacto del dispositivo
+
         "liquid_glass_enabled": False,
         "streaming_paste_enabled": False,
         "mouse_button_hotkey": None,  # None | "middle" | "x1" | "x2"
