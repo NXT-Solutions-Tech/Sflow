@@ -18,8 +18,8 @@ cleanup PRP) · this file. Kickoff prompt lives in the session that created the 
 
 | # | Track | Goal | Size | Status |
 |---|-------|------|------|--------|
-| **M1** | Interface | Reactive pill: live waveform + visibility bound to dictation state (fade in/out, no idle pill) | S | **IN PROGRESS** |
-| M2 | Quality | Auto Cleanup levels None/Light/Medium (None bypasses LLM) | M | TODO |
+| M1 | Interface | Reactive pill: live waveform + visibility bound to dictation state (fade in/out, no idle pill) | S | **DONE** ✅ |
+| **M2** | Quality | Auto Cleanup levels None/Light/Medium (None bypasses LLM) | M | **IN PROGRESS** |
 | M3 | Quality | Text substitutions ("btw→by the way") as a post-transcription pass, editable in Dictionary | M | TODO |
 | M4 | Settings | Unified native Settings window, General/System tabs; consolidate the two UIs; keys→Keychain | L | TODO |
 | M5 | Settings | Transforms editor for the 8 Opt+N prompt slots | S | TODO |
@@ -27,7 +27,10 @@ cleanup PRP) · this file. Kickoff prompt lives in the session that created the 
 
 ---
 
-## Current milestone — M1: Reactive audio-waveform pill
+> **M1 CLOSED ✅** — accepted on-device. Commits: `be29347` (state-bound show/hide),
+> `fix(pill)` (fade hardening), `feat(pill): larger, fuller audio waveform`. Next: **M2**.
+
+## M1 (done) — Reactive audio-waveform pill
 
 **Branch:** `feat/pill-reactive`. Outcome: pill fades in with live voice-reactive bars while
 dictating/processing, then fades out and is fully hidden. No persistent idle pill.
@@ -54,9 +57,10 @@ dictating/processing, then fades out and is fully hidden. No persistent idle pil
   pill (`main.py:start`). Headless state-machine test: idle→hidden, recording→visible+viz on,
   processing→visible+viz off, done→visible, idle→hidden, rapid start/stop/start→single pill.
   All pass.
-- [ ] **Gate 1.3 (real-display acceptance)** — needs the user's Mac/mic: confirm the fade
-  actually renders, bars react live, result pastes with **no focus steal**, no ghost pill,
-  history/dashboard unchanged. (Headless can't render window opacity or drive the real mic.)
+- [x] **Gate 1.3 (real-display acceptance)** — **ACCEPTED by user (2026-07-15)** on their Mac:
+  pill fades in on dictation, bars react live, pastes with no focus steal, fades out. Follow-up
+  tuning `feat(pill): larger, fuller audio waveform` (taller/wider/brighter bars) — accepted.
+  Also hardened the fade so it can never leave the pill stuck invisible.
 
 ### Session handoff
 - **Done:** M1 code complete on `feat/pill-reactive`; validated everything that's checkable
