@@ -32,6 +32,9 @@ SETTINGS_PATH = os.path.join(_DATA_DIR, "settings.json")
 
 def _default_settings() -> dict:
     return {
+        # Apariencia visual. "auto" sigue el modo claro/oscuro del sistema macOS;
+        # "light" | "dark" fuerzan un tema. Ver ui/theme.py.
+        "theme": "auto",
         # Modelo de transcripcion activo. Ver STT_MODELS (abajo) para el catalogo.
         # Default: Whisper Turbo LOCAL (mejor precision es + offline, gana a Groq en
         # latencia y privacidad segun benchmark M4 12-jul-2026). Fallback a groq si

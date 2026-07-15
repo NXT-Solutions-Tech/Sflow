@@ -27,19 +27,10 @@ import subprocess
 
 
 # ---------- Color palette ----------
-class C:
-    BG = "#0f0f0f"
-    BG_ALT = "#1a1a1a"
-    BG_HOVER = "#222222"
-    BG_CARD = "#181818"
-    BG_INPUT = "#202020"
-    TEXT = "#e8e8e8"
-    TEXT_DIM = "#8a8a8a"
-    TEXT_FAINT = "#555555"
-    ACCENT = "#5a9fff"
-    DIVIDER = "#2a2a2a"
-    OK = "#50d278"
-    ERR = "#ff4646"
+# Live theme proxy: C.BG / C.ACCENT / … resolve against the active light|dark
+# scheme (see ui/theme.py). Keeps the legacy token API so existing inline
+# stylesheets become theme-aware for free.
+from ui.theme import C  # noqa: E402
 
 
 # ---------- Helpers ----------
@@ -682,12 +673,8 @@ class SnippetsPage(QWidget):
 
     def _snippet_card(self, s: dict) -> QFrame:
         f = QFrame()
-        f.setStyleSheet(f"""
-            QFrame {{
-                background: {C.BG_CARD}; border: 1px solid {C.DIVIDER};
-                border-radius: 8px;
-            }}
-        """)
+        f.setObjectName("card")
+        f.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 8px; }}")
         lay = QVBoxLayout(f)
         lay.setContentsMargins(14, 10, 14, 10)
         lay.setSpacing(4)
@@ -1077,7 +1064,8 @@ class InsightsPage(QWidget):
 
     def _stat_card(self, value: str, label: str) -> QFrame:
         card = QFrame()
-        card.setStyleSheet(f"QFrame {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
+        card.setObjectName("card")
+        card.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
         cl = QVBoxLayout(card)
         cl.setContentsMargins(16, 14, 16, 14)
         cl.setSpacing(4)
@@ -1091,7 +1079,8 @@ class InsightsPage(QWidget):
 
     def _section(self, name: str) -> QVBoxLayout:
         box = QFrame()
-        box.setStyleSheet(f"QFrame {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
+        box.setObjectName("card")
+        box.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
         inner = QVBoxLayout(box)
         inner.setContentsMargins(16, 14, 16, 14)
         inner.setSpacing(10)
@@ -1204,7 +1193,8 @@ class TransformsPage(QWidget):
         for i in range(8):
             p = prompts[i] if i < len(prompts) else {"label": "", "prompt": ""}
             card = QFrame()
-            card.setStyleSheet(f"QFrame {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 10px; }}")
+            card.setObjectName("card")
+            card.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 10px; }}")
             cl = QVBoxLayout(card)
             cl.setContentsMargins(14, 12, 14, 12)
             cl.setSpacing(8)
@@ -1315,12 +1305,8 @@ class HomePage(QWidget):
 
     def _stat_card(self, value: str, label: str) -> QFrame:
         f = QFrame()
-        f.setStyleSheet(f"""
-            QFrame {{
-                background: {C.BG_CARD}; border: 1px solid {C.DIVIDER};
-                border-radius: 12px;
-            }}
-        """)
+        f.setObjectName("card")
+        f.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
         lay = QVBoxLayout(f)
         lay.setContentsMargins(18, 14, 18, 14)
         lay.setSpacing(4)
@@ -1376,7 +1362,10 @@ class HubWindow(QWidget):
         self.db = db
         self.setWindowTitle("SFlow")
         self.resize(880, 620)
-        self.setStyleSheet(f"background: {C.BG}; color: {C.TEXT};")
+        # Scope the window sheet by objectName so its box props don't leak into
+        # styled descendants (Qt propagates bare-selector borders to children).
+        self.setObjectName("HubWindow")
+        self.setStyleSheet(f"#HubWindow {{ background: {C.BG}; color: {C.TEXT}; }}")
 
         # --- Layout ---
         root = QHBoxLayout(self)
@@ -1386,7 +1375,8 @@ class HubWindow(QWidget):
         # Sidebar
         side = QFrame()
         side.setFixedWidth(190)
-        side.setStyleSheet(f"background: {C.BG_ALT}; border-right: 1px solid {C.DIVIDER};")
+        side.setObjectName("sidebar")
+        side.setStyleSheet(f"#sidebar {{ background: {C.BG_ALT}; border-right: 1px solid {C.DIVIDER}; }}")
         sl = QVBoxLayout(side)
         sl.setContentsMargins(14, 18, 14, 14)
         sl.setSpacing(4)

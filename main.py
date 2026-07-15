@@ -38,6 +38,17 @@ from core.logger import log, log_exc
 from db.database import TranscriptionDB
 from web.server import start_web_server
 from config import LOGO_PATH, APP_DATA_DIR, AUDIO_DIR, get_setting
+from ui import theme
+
+
+def apply_theme(app: QApplication) -> str:
+    """Load bundled fonts and apply the global stylesheet for the resolved
+    scheme (auto→system, or the forced light/dark setting). Returns the scheme."""
+    theme.load_fonts()
+    scheme = theme.resolve_scheme(get_setting("theme", "auto"))
+    theme.set_active_scheme(scheme)
+    app.setStyleSheet(theme.qss(scheme))
+    return scheme
 
 
 def _ensure_accessibility() -> bool:
@@ -521,6 +532,18 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("SFlow")
     app.setQuitOnLastWindowClosed(False)
+
+    # Global design system (fonts + light/dark QSS). Re-apply live when the
+    # macOS appearance changes and the user is on "auto".
+    apply_theme(app)
+
+    def _on_system_scheme_changed(_cs=None):
+        if get_setting("theme", "auto") == "auto":
+            apply_theme(app)
+    try:
+        app.styleHints().colorSchemeChanged.connect(_on_system_scheme_changed)
+    except Exception:
+        pass
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
