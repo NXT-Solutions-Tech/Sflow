@@ -65,6 +65,25 @@ def _db_takes_path():
         return False
 
 
+def _seed(db):
+    """Insert a few sample transcriptions so content pages render for review."""
+    try:
+        if db.get_recent(limit=1):
+            return
+        samples = [
+            ("Recuérdame enviar el reporte de ventas antes de las cinco.", "es", 3.2, "Slack"),
+            ("Let's schedule the design review for Thursday morning.", "en", 2.8, "Gmail"),
+            ("Nueva línea. El plan de la semana quedó listo, dale enter.", "es", 4.1, "Notes"),
+            ("This is a longer dictation to test how the card preview truncates "
+             "and expands when the text runs well past the fold in the history list.",
+             "en", 7.5, "VS Code"),
+        ]
+        for text, lang, dur, app in samples:
+            db.insert(text, language=lang, duration_seconds=dur, model="whisper-turbo-local", app=app)
+    except Exception as e:
+        print(f"  (seed skipped: {e})")
+
+
 def _grab(widget, name, scheme):
     # Respect the size the caller already set; only fall back if unsized.
     if widget.width() < 40 or widget.height() < 40:
@@ -88,6 +107,7 @@ def build_surfaces(scheme):
     surfaces = []
 
     db = _temp_db()
+    _seed(db)
     hub = HubWindow(db)
     hub.resize(880, 620)
     surfaces.append(("hub", hub))
@@ -107,11 +127,22 @@ def build_surfaces(scheme):
         (lambda: TransformsPage(), "page_transforms"),
         (lambda: SettingsPage(), "page_settings"),
     ]
+    from PyQt6.QtWidgets import QWidget, QVBoxLayout
+    bg = theme.tokens(theme.active_scheme())["bg"]
     for ctor, nm in page_ctors:
         try:
-            pg = ctor()  # pages populate themselves in __init__
-            pg.resize(700, 620)
-            surfaces.append((nm, pg))
+            pg = ctor()
+            if hasattr(pg, "reload"):
+                pg.reload()  # fresh page → first population, no duplicates
+            # Wrap in a themed background so the standalone grab matches the Hub.
+            holder = QWidget()
+            holder.setObjectName("holder")
+            holder.setStyleSheet(f"#holder {{ background: {bg}; }}")
+            lay = QVBoxLayout(holder)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lay.addWidget(pg)
+            holder.resize(700, 620)
+            surfaces.append((nm, holder))
         except Exception as e:
             print(f"  (skip {nm}: {e})")
 

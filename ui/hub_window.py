@@ -117,7 +117,7 @@ class EditTranscriptDialog(QDialog):
                 border: none; border-radius: 6px;
                 padding: 8px 18px; font-weight: 500; font-size: 12px;
             }}
-            QPushButton:hover {{ background: #4a8fef; }}
+            QPushButton:hover {{ background: {C.ACCENT_HOVER}; }}
         """)
         save.clicked.connect(self._save)
         row.addWidget(save)
@@ -529,7 +529,7 @@ class DictionaryPage(QWidget):
                 border: none; border-radius: 8px;
                 padding: 8px 20px; font-weight: 500; font-size: 13px;
             }}
-            QPushButton:hover {{ background: #4a8fef; }}
+            QPushButton:hover {{ background: {C.ACCENT_HOVER}; }}
         """
 
     def _load(self):
@@ -648,7 +648,7 @@ class SnippetsPage(QWidget):
                 border: none; border-radius: 6px;
                 padding: 7px 18px; font-weight: 500; font-size: 12px;
             }}
-            QPushButton:hover {{ background: #4a8fef; }}
+            QPushButton:hover {{ background: {C.ACCENT_HOVER}; }}
         """
 
     def _add(self):
@@ -963,7 +963,7 @@ class SettingsPage(QWidget):
                 border: none; border-radius: 8px;
                 padding: 10px 24px; font-weight: 500; font-size: 13px;
             }}
-            QPushButton:hover {{ background: #4a8fef; }}
+            QPushButton:hover {{ background: {C.ACCENT_HOVER}; }}
         """)
         save.clicked.connect(self._save)
         bar.addWidget(save)
@@ -1191,7 +1191,7 @@ class InsightsPage(QWidget):
                 sq.setStyleSheet(f"background: {C.BG_INPUT}; border-radius: 3px;")
             else:
                 alpha = 90 + int(165 * min(1.0, n / mx))
-                sq.setStyleSheet(f"background: rgba(74,143,239,{alpha}); border-radius: 3px;")
+                sq.setStyleSheet(f"background: rgba(140,80,220,{alpha}); border-radius: 3px;")
             strip.addWidget(sq)
         strip.addStretch()
         act.addLayout(strip)
@@ -1274,7 +1274,7 @@ class TransformsPage(QWidget):
         save.setStyleSheet(f"""
             QPushButton {{ background: {C.ACCENT}; color: white; border: none;
                 border-radius: 8px; padding: 10px 24px; font-weight: 500; font-size: 13px; }}
-            QPushButton:hover {{ background: #4a8fef; }}
+            QPushButton:hover {{ background: {C.ACCENT_HOVER}; }}
         """)
         save.clicked.connect(self._save)
         bar.addWidget(save)
