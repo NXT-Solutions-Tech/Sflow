@@ -324,7 +324,7 @@ class HistoryPage(QWidget):
         root.setSpacing(14)
 
         title = QLabel("Historial")
-        title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
+        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
         root.addWidget(title)
 
         sub = QLabel("Tus transcripciones recientes. Click en una para expandir, ⋮ para acciones.")
@@ -491,7 +491,7 @@ class DictionaryPage(QWidget):
         root.setSpacing(12)
 
         title = QLabel("Diccionario personal")
-        title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
+        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
         root.addWidget(title)
 
         sub = QLabel("Una palabra o frase por línea (pista de vocabulario para Whisper: nombres, jerga, términos técnicos).\nPara sustituciones automáticas de texto usa una flecha:  btw -> by the way")
@@ -563,7 +563,7 @@ class SnippetsPage(QWidget):
         root.setSpacing(14)
 
         title = QLabel("Snippets")
-        title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
+        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
         root.addWidget(title)
 
         sub = QLabel(
@@ -738,7 +738,7 @@ class SettingsPage(QWidget):
         root.setSpacing(16)
 
         title = QLabel("Ajustes")
-        title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
+        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
         root.addWidget(title)
 
         tabs = QTabWidget()
@@ -1075,7 +1075,7 @@ class InsightsPage(QWidget):
         outer.setContentsMargins(28, 22, 28, 16)
         outer.setSpacing(16)
         title = QLabel("Insights")
-        title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
+        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
         outer.addWidget(title)
 
         self._scroll = QScrollArea()
@@ -1209,7 +1209,7 @@ class TransformsPage(QWidget):
         outer.setSpacing(12)
 
         title = QLabel("Transforms")
-        title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
+        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
         outer.addWidget(title)
         sub = QLabel("Reescrituras con IA sobre el texto seleccionado. Selecciona texto y aplica con ⌥+1…8.")
         sub.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")

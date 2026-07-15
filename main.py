@@ -94,22 +94,54 @@ _PLIST_PATH = os.path.expanduser(f"~/Library/LaunchAgents/{_LAUNCH_AGENT_LABEL}.
 class FirstRunDialog(QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SFlow — Setup")
-        self.setFixedWidth(420)
+        self.setWindowTitle("SFlow")
+        self.setFixedWidth(460)
+
+        from ui import theme
+        accent = theme.tokens(theme.active_scheme())["accent"]
+        dim = theme.tokens(theme.active_scheme())["text_secondary"]
 
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Ingresa tu Groq API Key para transcripciones:"))
+        layout.setContentsMargins(36, 32, 36, 32)
+        layout.setSpacing(14)
 
-        link = QLabel('<a href="https://console.groq.com/keys">Obtener gratis en console.groq.com/keys</a>')
+        # Brand mark
+        logo = QLabel()
+        pm = QPixmap(LOGO_PATH)
+        if not pm.isNull():
+            logo.setPixmap(pm.scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio,
+                                     Qt.TransformationMode.SmoothTransformation))
+        layout.addWidget(logo)
+
+        title = QLabel("Te damos la bienvenida a SFlow")
+        title.setStyleSheet(f"font-family: 'Instrument Serif'; font-size: 30px;")
+        layout.addWidget(title)
+
+        sub = QLabel("Dictado por voz, privado y veloz. Para empezar, pega tu Groq API "
+                     "key — se usa para la transcripción en la nube (los modelos locales "
+                     "no la necesitan).")
+        sub.setWordWrap(True)
+        sub.setStyleSheet(f"color: {dim}; font-size: 13px;")
+        layout.addWidget(sub)
+
+        link = QLabel('<a style="color:%s; text-decoration:none;" '
+                      'href="https://console.groq.com/keys">Obtener una gratis en '
+                      'console.groq.com/keys →</a>' % accent)
         link.setOpenExternalLinks(True)
+        link.setStyleSheet("font-size: 13px;")
         layout.addWidget(link)
+        layout.addSpacing(4)
 
         self.key_input = QLineEdit()
         self.key_input.setPlaceholderText("gsk_...")
         self.key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.key_input.returnPressed.connect(self._save_key)
         layout.addWidget(self.key_input)
 
         save_btn = QPushButton("Guardar y continuar")
+        save_btn.setObjectName("primary")
+        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        save_btn.setMinimumHeight(38)
         save_btn.clicked.connect(self._save_key)
         layout.addWidget(save_btn)
 
