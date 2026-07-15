@@ -1,0 +1,2 @@
+# Dev/test-only deps (not bundled in the .app)
+pytest>=8.0
