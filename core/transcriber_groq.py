@@ -1,7 +1,7 @@
 import io
 import os
 from groq import Groq
-from config import GROQ_MODEL, WHISPER_LANGUAGE
+from config import GROQ_MODEL, get_stt_language
 
 
 _HALLUCINATION_MARKERS = (
@@ -54,10 +54,12 @@ class GroqTranscriber:
         kwargs = dict(
             file=("recording.wav", data),
             model=GROQ_MODEL,
-            language=WHISPER_LANGUAGE,
             response_format="text",
             temperature=0.0,
         )
+        lang = get_stt_language()
+        if lang:  # None = autodeteccion → omitir el parametro
+            kwargs["language"] = lang
         if vocabulary_prompt:
             kwargs["prompt"] = vocabulary_prompt
         transcription = self._get_client().audio.transcriptions.create(**kwargs)

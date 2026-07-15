@@ -9,7 +9,7 @@ Opcional: `pip install mlx-whisper` (Apple Silicon).
 import io
 import tempfile
 import os
-from config import LOCAL_MODEL_ID, WHISPER_LANGUAGE
+from config import LOCAL_MODEL_ID, get_stt_language
 
 
 class LocalTranscriber:
@@ -46,7 +46,7 @@ class LocalTranscriber:
             mlx_whisper.transcribe(
                 np.zeros(1600, dtype=np.float32),  # 0.1s de silencio
                 path_or_hf_repo=self._model_id,
-                language=WHISPER_LANGUAGE,
+                language=get_stt_language(),
                 temperature=0.0,
             )
         except Exception:
@@ -71,7 +71,7 @@ class LocalTranscriber:
         try:
             kwargs = {
                 "path_or_hf_repo": self._model_id,
-                "language": WHISPER_LANGUAGE,
+                "language": get_stt_language(),  # None = autodeteccion
                 "temperature": 0.0,
             }
             if vocabulary_prompt:

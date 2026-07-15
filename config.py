@@ -37,6 +37,7 @@ def _default_settings() -> dict:
         # latencia y privacidad segun benchmark M4 12-jul-2026). Fallback a groq si
         # el motor MLX no esta disponible en runtime.
         "stt_model": "whisper-turbo-local",
+        "stt_language": "auto",  # "auto" = autodeteccion (ES/EN/...); o codigo ISO como "es"/"en" para forzar
         "transcribe_backend": "groq",   # LEGACY — migrado a stt_model (ver load_settings)
         "llm_cleanup_enabled": False,  # OFF por default: fidelidad > limpieza. Opt-in en Hub si se desea auto-puntuacion.
         "llm_model": "llama-3.3-70b-versatile",  # modelo con mejor instruction-following (menos alucinaciones)
@@ -114,7 +115,13 @@ def set_setting(key: str, value):
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = "whisper-large-v3-turbo"
 LLM_CLEANUP_MODEL = "llama-3.3-70b-versatile"  # mejor fidelidad que 8b (~300-500ms vs 100-200ms)
-WHISPER_LANGUAGE = "es"
+WHISPER_LANGUAGE = "es"  # LEGACY: idioma historico. El STT ahora usa get_stt_language() (default autodeteccion).
+
+
+def get_stt_language():
+    """Codigo ISO de idioma para STT, o None para autodeteccion (setting 'stt_language'=='auto')."""
+    lang = (get_setting("stt_language", "auto") or "auto").strip().lower()
+    return None if lang == "auto" else lang
 
 # --- OpenRouter API (proveedor alternativo de limpieza LLM, default GLM) ---
 # Se activa poniendo llm_cleanup_provider="openrouter" (Ajustes). Fail-open: si no hay
