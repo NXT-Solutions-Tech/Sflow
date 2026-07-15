@@ -759,8 +759,15 @@ class SettingsPage(QWidget):
         _system = QWidget(); sysl = QVBoxLayout(_system)
         sysl.setContentsMargins(2, 12, 2, 2); sysl.setSpacing(14)
         sysl.setAlignment(Qt.AlignmentFlag.AlignTop)
-        tabs.addTab(_general, "General")
-        tabs.addTab(_system, "System")
+        def _scrolled(inner_widget):
+            sa = QScrollArea()
+            sa.setWidgetResizable(True)
+            sa.setFrameShape(QFrame.Shape.NoFrame)
+            sa.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+            sa.setWidget(inner_widget)
+            return sa
+        tabs.addTab(_scrolled(_general), "General")
+        tabs.addTab(_scrolled(_system), "System")
         root.addWidget(tabs, 1)
 
         def group(name, target) -> QVBoxLayout:

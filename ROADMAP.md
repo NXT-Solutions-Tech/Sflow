@@ -62,13 +62,21 @@ dictating/processing, then fades out and is fully hidden. No persistent idle pil
   tuning `feat(pill): larger, fuller audio waveform` (taller/wider/brighter bars) — accepted.
   Also hardened the fade so it can never leave the pill stuck invisible.
 
-### Session handoff
-- **Done:** M1 code complete on `feat/pill-reactive`; validated everything that's checkable
-  headless (state machine, real-audio bars, full import graph, dashboard). Also on this
-  branch's history: OpenRouter/GLM cleanup provider, glm-4.7-flash default, ffmpeg fix, new
-  app icon, mic-device selector, multilingual auto-detect.
-- **Next:** user runs the real-display acceptance test for Gate 1.3. If the Qt opacity fade
-  doesn't render on their Qt build, switch to native `NSWindow.alphaValue` (fallback noted
-  above). Then start **M2 — Auto Cleanup levels None/Light/Medium** (reuses
-  `core/llm_cleanup.py` `_build_system_prompt`).
+### Session handoff (all milestones complete)
+- **M1–M6 all DONE**, each validated headless and committed. Branches: `feat/pill-reactive`
+  (M1) → `feat/cleanup-levels` (M2–M6 stacked). Key commits: `be29347`/`1bdcc90` pill,
+  `e9172a6` cleanup levels, `334d9a5` substitutions, `c9b1a15` settings+Keychain, `00c97d9`
+  transforms editor, `964b114` insights, plus the settings-tabs scroll polish.
+- **Validated headless:** full `SFlowApp` graph constructs; 34 modules import; all 7 Hub
+  pages construct + reload; pill state machine; real-audio bars (24× voice/silence); Auto
+  Cleanup Light≠Medium via real LLM; substitutions; Keychain roundtrip; insights math
+  (WPM/per-app/streak + legacy backfill); dashboard via Playwright. UI previews rendered
+  (settings General/System, Transforms, Insights) — clean/minimalist.
+- **Needs on-device acceptance (can't be done headless):** run `python3 main.py` and check
+  in the real GUI: (a) new tabbed Settings (General/System) saves + API-key→Keychain;
+  (b) Transforms editor persists ⌥1–8; (c) Insights shows real per-app data after a few
+  dictations; (d) Auto Cleanup None/Light/Medium behavior end-to-end; (e) substitutions
+  ("btw → by the way") in a real dictation. Then **package**: `bash build.sh`.
+- **Deferred (noted):** raw-text preservation for "undo AI edit" (Wispr parity) — deferred
+  from M2 to a future pass; dashboard footer still says "Groq Whisper" (cosmetic).
 - **Open decision:** none blocking.
