@@ -9,12 +9,12 @@ Two selectable providers (setting `llm_cleanup_provider`), same system prompt:
 Ambos son fail-open: cualquier error/timeout/falta-de-key devuelve el texto crudo,
 nunca bloquea el pegado.
 """
-import os
 import requests
 from groq import Groq
 import config
 from config import LLM_CLEANUP_MODEL, get_setting
 from core.logger import log as _log
+from core.secrets import get_key
 
 
 _BASE_RULES = """Eres un corrector MINIMO de transcripciones de voz. Tu trabajo es PRESERVAR la transcripcion casi intacta, solo haciendo los cambios ESTRICTAMENTE necesarios.
@@ -111,7 +111,7 @@ class LLMCleanup:
 
     def _get_client(self) -> Groq:
         if self._client is None:
-            key = os.getenv("GROQ_API_KEY", "")
+            key = get_key("GROQ_API_KEY")
             if not key:
                 raise ValueError("GROQ_API_KEY not configured")
             self._client = Groq(api_key=key, timeout=8.0)
@@ -148,7 +148,7 @@ class LLMCleanup:
         return completion.choices[0].message.content or ""
 
     def _clean_openrouter(self, system_prompt: str, text: str) -> str:
-        key = config.OPENROUTER_API_KEY or os.getenv("OPENROUTER_API_KEY", "")
+        key = get_key("OPENROUTER_API_KEY")
         if not key:
             # Sin key no hay nada que hacer: devolver crudo (fail-open). NO logueamos la key.
             _log("LLM cleanup: OPENROUTER_API_KEY no configurada, se pega texto crudo", "WARN")

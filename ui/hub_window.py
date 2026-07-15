@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QScrollArea, QFrame, QStackedWidget, QListWidget, QListWidgetItem,
     QMenu, QPlainTextEdit, QGroupBox, QCheckBox, QComboBox, QDialog,
-    QApplication, QMessageBox, QSizePolicy, QFileDialog,
+    QApplication, QMessageBox, QSizePolicy, QFileDialog, QTabWidget,
 )
 from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
 from PyQt6.QtGui import QIcon, QAction, QPixmap, QFont, QPainter, QColor, QPen
@@ -18,8 +18,10 @@ from db.snippets import SnippetsDB
 from core.paste import paste_last_transcript
 from core.relaunch import relaunch_app
 from config import (
-    LOGO_PATH, DICTIONARY_PATH, get_setting, set_setting,
+    LOGO_PATH, DICTIONARY_PATH, get_setting, set_setting, STT_MODELS,
 )
+from core.recorder import list_input_devices
+from core.secrets import set_key, key_source
 import os
 import subprocess
 
@@ -740,7 +742,28 @@ class SettingsPage(QWidget):
         title.setStyleSheet(f"color: {C.TEXT}; font-size: 22px; font-weight: 600;")
         root.addWidget(title)
 
-        def group(name: str) -> QVBoxLayout:
+        tabs = QTabWidget()
+        tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border: none; }}
+            QTabBar::tab {{
+                background: transparent; color: {C.TEXT_DIM};
+                padding: 8px 18px; margin-right: 2px; border: none;
+                border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500;
+            }}
+            QTabBar::tab:selected {{ color: {C.TEXT}; border-bottom: 2px solid {C.ACCENT}; }}
+            QTabBar::tab:hover {{ color: {C.TEXT}; }}
+        """)
+        _general = QWidget(); gen = QVBoxLayout(_general)
+        gen.setContentsMargins(2, 12, 2, 2); gen.setSpacing(14)
+        gen.setAlignment(Qt.AlignmentFlag.AlignTop)
+        _system = QWidget(); sysl = QVBoxLayout(_system)
+        sysl.setContentsMargins(2, 12, 2, 2); sysl.setSpacing(14)
+        sysl.setAlignment(Qt.AlignmentFlag.AlignTop)
+        tabs.addTab(_general, "General")
+        tabs.addTab(_system, "System")
+        root.addWidget(tabs, 1)
+
+        def group(name, target) -> QVBoxLayout:
             g = QGroupBox(name)
             g.setStyleSheet(f"""
                 QGroupBox {{
@@ -774,35 +797,49 @@ class SettingsPage(QWidget):
                 }}
             """)
             inner = QVBoxLayout()
-            inner.setContentsMargins(14, 4, 14, 10)
-            inner.setSpacing(2)
+            inner.setContentsMargins(14, 8, 14, 10)
+            inner.setSpacing(6)
             g.setLayout(inner)
-            root.addWidget(g)
+            target.addWidget(g)
             return inner
 
-        # --- Transcription ---
-        tl = group("Motor de transcripción")
-        self.backend = QComboBox()
-        self.backend.addItem("Groq Whisper Turbo — cloud, 500-800ms E2E, requiere internet", "groq")
-        self.backend.addItem("mlx-whisper (small) — offline, ~1s por 10s audio, `pip install mlx-whisper`", "local")
-        self.backend.setCurrentIndex(0 if get_setting("transcribe_backend", "groq") == "groq" else 1)
-        tl.addWidget(self.backend)
+        def dim(text):
+            lb = QLabel(text)
+            lb.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; margin-top: 2px;")
+            return lb
 
-        # --- Paste ---
-        pl = group("Inserción de texto")
-        self.paste_combo = QComboBox()
-        self.paste_combo.addItem("Keystroke injection — NO toca tu portapapeles (default)", "keystroke")
-        self.paste_combo.addItem("Clipboard + Cmd+V — legacy, sobrescribe tu portapapeles temporalmente", "clipboard")
-        self.paste_combo.setCurrentIndex(0 if get_setting("paste_backend", "keystroke") == "keystroke" else 1)
-        pl.addWidget(self.paste_combo)
+        _input_qss = (
+            f"background: {C.BG_INPUT}; color: {C.TEXT}; border: 1px solid {C.DIVIDER};"
+            f" border-radius: 6px; padding: 7px 10px; font-size: 13px;"
+        )
 
-        self.streaming = QCheckBox("Streaming paste (efecto typing palabra-por-palabra)")
-        self.streaming.setChecked(get_setting("streaming_paste_enabled", False))
-        pl.addWidget(self.streaming)
+        # ============ GENERAL ============
+        tl = group("Transcripción", gen)
+        tl.addWidget(dim("Modelo de transcripción"))
+        self.model_combo = QComboBox()
+        for m in STT_MODELS:
+            self.model_combo.addItem(m["label"], m["id"])
+        self.model_combo.setCurrentIndex(max(0, self.model_combo.findData(get_setting("stt_model", "whisper-turbo-local"))))
+        tl.addWidget(self.model_combo)
 
-        # --- AI cleanup ---
-        al = group("Procesamiento con LLM")
-        al.addWidget(QLabel("Auto Cleanup (limpieza con LLM):"))
+        tl.addWidget(dim("Idioma del dictado"))
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItem("Auto — detecta ES/EN automáticamente", "auto")
+        self.lang_combo.addItem("Español", "es")
+        self.lang_combo.addItem("English", "en")
+        self.lang_combo.setCurrentIndex(max(0, self.lang_combo.findData(get_setting("stt_language", "auto"))))
+        tl.addWidget(self.lang_combo)
+
+        tl.addWidget(dim("Micrófono / entrada de audio"))
+        self.mic_combo = QComboBox()
+        self.mic_combo.addItem("Predeterminado del sistema", "")
+        for d in list_input_devices():
+            self.mic_combo.addItem(d["name"], d["name"])
+        self.mic_combo.setCurrentIndex(max(0, self.mic_combo.findData(get_setting("input_device", "") or "")))
+        tl.addWidget(self.mic_combo)
+
+        al = group("Auto Cleanup", gen)
+        al.addWidget(dim("Nivel de limpieza"))
         self.cleanup_combo = QComboBox()
         self.cleanup_combo.addItem("None — sin limpieza, texto verbatim", "none")
         self.cleanup_combo.addItem("Light — muletillas + puntuación", "light")
@@ -810,44 +847,81 @@ class SettingsPage(QWidget):
         self.cleanup_combo.setCurrentIndex(max(0, self.cleanup_combo.findData(get_setting("auto_cleanup_level", "none"))))
         al.addWidget(self.cleanup_combo)
 
-        self.context = QCheckBox("Adaptar tono según app activa (Slack casual, Gmail formal, etc.)")
+        al.addWidget(dim("Proveedor de limpieza"))
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItem("Groq · Llama (nube)", "groq")
+        self.provider_combo.addItem("OpenRouter · GLM (nube)", "openrouter")
+        self.provider_combo.setCurrentIndex(max(0, self.provider_combo.findData(get_setting("llm_cleanup_provider", "groq"))))
+        al.addWidget(self.provider_combo)
+
+        self.context = QCheckBox("Adaptar tono según la app activa (Slack casual, Gmail formal…)")
         self.context.setChecked(get_setting("context_aware_tone", True))
         al.addWidget(self.context)
 
+        xl = group("Texto", gen)
         self.commands = QCheckBox("Comandos de voz (\"nueva línea\", \"punto y aparte\", \"coma\")")
         self.commands.setChecked(get_setting("smart_commands_enabled", True))
-        al.addWidget(self.commands)
-
+        xl.addWidget(self.commands)
         self.dict_toggle = QCheckBox("Usar diccionario personal como vocabulario")
         self.dict_toggle.setChecked(get_setting("personal_dictionary_enabled", True))
-        al.addWidget(self.dict_toggle)
-
-        self.subs_toggle = QCheckBox("Sustituciones de texto del diccionario (btw → by the way)")
+        xl.addWidget(self.dict_toggle)
+        self.subs_toggle = QCheckBox("Sustituciones de texto (btw → by the way)")
         self.subs_toggle.setChecked(get_setting("text_substitutions_enabled", True))
-        al.addWidget(self.subs_toggle)
+        xl.addWidget(self.subs_toggle)
 
-        # --- UX ---
-        ul = group("UX")
-        self.glass = QCheckBox("Liquid Glass en la pill (experimental — macOS 26+)")
-        self.glass.setChecked(get_setting("liquid_glass_enabled", False))
-        ul.addWidget(self.glass)
+        # ============ SYSTEM ============
+        pl = group("Inserción de texto", sysl)
+        pl.addWidget(dim("Método de pegado"))
+        self.paste_combo = QComboBox()
+        self.paste_combo.addItem("Keystroke — no toca tu portapapeles (recomendado)", "keystroke")
+        self.paste_combo.addItem("Clipboard + Cmd+V — sobrescribe el portapapeles", "clipboard")
+        self.paste_combo.setCurrentIndex(0 if get_setting("paste_backend", "keystroke") == "keystroke" else 1)
+        pl.addWidget(self.paste_combo)
+        self.streaming = QCheckBox("Streaming paste (typing palabra-por-palabra)")
+        self.streaming.setChecked(get_setting("streaming_paste_enabled", False))
+        pl.addWidget(self.streaming)
 
+        snd = group("Sonido", sysl)
+        self.sound_start = QCheckBox("Sonido al empezar a dictar")
+        self.sound_start.setChecked(get_setting("sound_on_start", False))
+        snd.addWidget(self.sound_start)
+        self.sound_done = QCheckBox("Sonido al terminar")
+        self.sound_done.setChecked(get_setting("sound_on_done", False))
+        snd.addWidget(self.sound_done)
+
+        bl = group("Comportamiento", sysl)
         self.command_mode = QCheckBox("Command Mode (Ctrl+Shift hold → transforma selección con voz)")
         self.command_mode.setChecked(get_setting("command_mode_enabled", True))
-        ul.addWidget(self.command_mode)
+        bl.addWidget(self.command_mode)
+        self.focus_mode = QCheckBox("Focus Mode (silencia apps distractoras al dictar)")
+        self.focus_mode.setChecked(get_setting("focus_mode_enabled", False))
+        bl.addWidget(self.focus_mode)
+        self.save_audio = QCheckBox("Guardar audio para re-transcribir (historial)")
+        self.save_audio.setChecked(get_setting("save_audio_for_retry", True))
+        bl.addWidget(self.save_audio)
+        self.glass = QCheckBox("Liquid Glass en la pill (experimental — macOS 26+)")
+        self.glass.setChecked(get_setting("liquid_glass_enabled", False))
+        bl.addWidget(self.glass)
 
-        # --- Mouse hotkey ---
-        hl = group("Hotkey de mouse (opcional)")
+        hl = group("Hotkey de mouse (opcional)", sysl)
         self.mouse = QComboBox()
         self.mouse.addItem("Ninguno", "")
         self.mouse.addItem("Click medio (rueda)", "middle")
         self.mouse.addItem("Botón lateral 1 (Mouse4)", "x1")
         self.mouse.addItem("Botón lateral 2 (Mouse5)", "x2")
-        cur = get_setting("mouse_button_hotkey") or ""
-        self.mouse.setCurrentIndex(max(0, self.mouse.findData(cur)))
+        self.mouse.setCurrentIndex(max(0, self.mouse.findData(get_setting("mouse_button_hotkey") or "")))
         hl.addWidget(self.mouse)
 
-        root.addStretch()
+        kl = group("API Keys · macOS Keychain", sysl)
+        kl.addWidget(dim("Groq API Key (STT en la nube + limpieza Llama)"))
+        self.groq_key = QLineEdit(); self.groq_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.groq_key.setPlaceholderText(self._key_status("GROQ_API_KEY")); self.groq_key.setStyleSheet(_input_qss)
+        kl.addWidget(self.groq_key)
+        kl.addWidget(dim("OpenRouter API Key (limpieza GLM)"))
+        self.or_key = QLineEdit(); self.or_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.or_key.setPlaceholderText(self._key_status("OPENROUTER_API_KEY")); self.or_key.setStyleSheet(_input_qss)
+        kl.addWidget(self.or_key)
+        kl.addWidget(dim("Se guardan en el Keychain de macOS. Deja en blanco para conservar la actual."))
 
         # Save bar
         bar = QHBoxLayout()
@@ -886,13 +960,22 @@ class SettingsPage(QWidget):
 
         self.setLayout(root)
 
+    @staticmethod
+    def _key_status(name: str) -> str:
+        """Placeholder text reflecting where the key lives — never the value."""
+        return {
+            "keychain": "•••••••• (guardada en Keychain)",
+            "env": "•••••••• (desde .env)",
+            "none": "no configurada",
+        }[key_source(name)]
+
     def _restart_snapshot(self) -> tuple:
         """Settings that only take effect after restart. If any change → offer relaunch."""
         return (
             get_setting("mouse_button_hotkey"),
             get_setting("liquid_glass_enabled", False),
             get_setting("command_mode_enabled", True),
-            get_setting("transcribe_backend", "groq"),
+            get_setting("stt_model", "whisper-turbo-local"),
         )
 
     def _relaunch(self):
@@ -906,18 +989,32 @@ class SettingsPage(QWidget):
             relaunch_app()
 
     def _save(self):
-        set_setting("transcribe_backend", self.backend.currentData())
-        set_setting("paste_backend", self.paste_combo.currentData())
-        set_setting("streaming_paste_enabled", self.streaming.isChecked())
+        set_setting("stt_model", self.model_combo.currentData())
+        set_setting("stt_language", self.lang_combo.currentData())
+        set_setting("input_device", self.mic_combo.currentData())
         set_setting("auto_cleanup_level", self.cleanup_combo.currentData())
+        set_setting("llm_cleanup_provider", self.provider_combo.currentData())
         set_setting("context_aware_tone", self.context.isChecked())
         set_setting("smart_commands_enabled", self.commands.isChecked())
         set_setting("personal_dictionary_enabled", self.dict_toggle.isChecked())
         set_setting("text_substitutions_enabled", self.subs_toggle.isChecked())
-        set_setting("liquid_glass_enabled", self.glass.isChecked())
+        set_setting("paste_backend", self.paste_combo.currentData())
+        set_setting("streaming_paste_enabled", self.streaming.isChecked())
+        set_setting("sound_on_start", self.sound_start.isChecked())
+        set_setting("sound_on_done", self.sound_done.isChecked())
         set_setting("command_mode_enabled", self.command_mode.isChecked())
+        set_setting("focus_mode_enabled", self.focus_mode.isChecked())
+        set_setting("save_audio_for_retry", self.save_audio.isChecked())
+        set_setting("liquid_glass_enabled", self.glass.isChecked())
         mb = self.mouse.currentData()
         set_setting("mouse_button_hotkey", mb if mb else None)
+        # API keys → Keychain (only when the user typed a new value)
+        if self.groq_key.text().strip():
+            set_key("GROQ_API_KEY", self.groq_key.text().strip())
+            self.groq_key.clear(); self.groq_key.setPlaceholderText(self._key_status("GROQ_API_KEY"))
+        if self.or_key.text().strip():
+            set_key("OPENROUTER_API_KEY", self.or_key.text().strip())
+            self.or_key.clear(); self.or_key.setPlaceholderText(self._key_status("OPENROUTER_API_KEY"))
 
         new_snapshot = self._restart_snapshot()
         needs_restart = new_snapshot != self._snapshot
