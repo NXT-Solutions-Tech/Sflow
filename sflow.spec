@@ -44,6 +44,8 @@ for pkg in ['mlx', 'mlx_whisper', 'parakeet_mlx', 'huggingface_hub', 'tiktoken',
 datas = [
     ('logo_small.png', '.'),
     ('logo.png', '.'),
+    ('assets/fonts', 'assets/fonts'),   # Instrument Serif + Inter (offline)
+    ('assets/icons', 'assets/icons'),   # Lucide SVGs (offline)
 ]
 datas += sounddevice_datas
 datas += pyobjc_datas
@@ -65,6 +67,8 @@ a = Analysis(
         'PyQt6.QtWidgets',
         'PyQt6.QtCore',
         'PyQt6.QtGui',
+        'PyQt6.QtSvg',          # Lucide SVG rendering (ui/icons.py)
+        'PyQt6.QtSvgWidgets',
         # Flask
         'flask',
         'jinja2',

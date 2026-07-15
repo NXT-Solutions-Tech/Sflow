@@ -11,6 +11,7 @@ import objc
 from PyQt6.QtWidgets import QWidget, QApplication
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPainter, QColor
+from ui import theme
 
 
 DOT_SIZE = 18
@@ -97,5 +98,7 @@ class RedDotIndicator(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         # Filled red square with subtle rounded corners
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(255, 59, 48, self._alpha))  # Apple system red
+        _err = QColor(theme.tokens("dark")["error"])  # single error token
+        _err.setAlpha(self._alpha)
+        painter.setBrush(_err)
         painter.drawRoundedRect(0, 0, DOT_SIZE, DOT_SIZE, 4, 4)

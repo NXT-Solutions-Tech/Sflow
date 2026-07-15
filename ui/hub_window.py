@@ -31,6 +31,7 @@ import subprocess
 # scheme (see ui/theme.py). Keeps the legacy token API so existing inline
 # stylesheets become theme-aware for free.
 from ui.theme import C  # noqa: E402
+from ui import icons  # noqa: E402
 
 
 # ---------- Helpers ----------
@@ -149,21 +150,24 @@ class EditTranscriptDialog(QDialog):
 
 
 class SidebarButton(QPushButton):
-    def __init__(self, icon_text: str, label: str):
-        super().__init__(f"{icon_text}   {label}")
+    def __init__(self, icon_name: str, label: str):
+        super().__init__(f"  {label}")
+        self._icon_name = icon_name
         self.setCheckable(True)
         self.setAutoExclusive(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(36)
-        self.setFont(QFont("Helvetica Neue", 13))
+        self.setMinimumHeight(38)
+        self.setIcon(icons.icon(icon_name, color=C.TEXT_DIM, size=18))
+        self.setIconSize(QSize(18, 18))
         self.setStyleSheet(f"""
             QPushButton {{
                 text-align: left;
-                padding: 6px 12px;
+                padding: 7px 12px;
                 border: none;
                 border-radius: 8px;
                 color: {C.TEXT_DIM};
                 background: transparent;
+                font-size: 13px;
             }}
             QPushButton:hover {{
                 background: {C.BG_HOVER};
@@ -172,9 +176,13 @@ class SidebarButton(QPushButton):
             QPushButton:checked {{
                 background: {C.BG_CARD};
                 color: {C.TEXT};
-                font-weight: 500;
+                font-weight: 600;
             }}
         """)
+        self.toggled.connect(self._retint)
+
+    def _retint(self, checked: bool):
+        self.setIcon(icons.icon(self._icon_name, color=(C.TEXT if checked else C.TEXT_DIM), size=18))
 
 
 class TranscriptionCard(QFrame):
@@ -218,16 +226,14 @@ class TranscriptionCard(QFrame):
         head.addWidget(meta)
         head.addStretch()
 
-        menu_btn = QPushButton("⋮")
-        menu_btn.setFixedSize(22, 22)
+        menu_btn = QPushButton()
+        menu_btn.setIcon(icons.icon("more", color=C.TEXT_DIM, size=16))
+        menu_btn.setIconSize(QSize(16, 16))
+        menu_btn.setFixedSize(24, 24)
         menu_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         menu_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; color: {C.TEXT_DIM};
-                border: none; font-size: 16px; font-weight: bold;
-                border-radius: 4px;
-            }}
-            QPushButton:hover {{ background: {C.BG_HOVER}; color: {C.TEXT}; }}
+            QPushButton {{ background: transparent; border: none; border-radius: 6px; }}
+            QPushButton:hover {{ background: {C.BG_HOVER}; }}
         """)
         menu_btn.clicked.connect(self._show_menu)
         head.addWidget(menu_btn)
@@ -327,8 +333,12 @@ class HistoryPage(QWidget):
         # Search + refresh
         row = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("🔍  Buscar transcripciones…")
+        self.search.setPlaceholderText("Buscar transcripciones…")
         self.search.setClearButtonEnabled(True)
+        self.search.addAction(
+            icons.icon("search", color=C.TEXT_FAINT, size=16),
+            QLineEdit.ActionPosition.LeadingPosition,
+        )
         self.search.setStyleSheet(f"""
             QLineEdit {{
                 background: {C.BG_INPUT}; color: {C.TEXT};
@@ -340,16 +350,17 @@ class HistoryPage(QWidget):
         self.search.textChanged.connect(self._filter)
         row.addWidget(self.search)
 
-        refresh = QPushButton("↻")
+        refresh = QPushButton()
+        refresh.setIcon(icons.icon("refresh", color=C.TEXT_DIM, size=16))
+        refresh.setIconSize(QSize(16, 16))
         refresh.setFixedSize(36, 36)
         refresh.setCursor(Qt.CursorShape.PointingHandCursor)
         refresh.setStyleSheet(f"""
             QPushButton {{
-                background: {C.BG_INPUT}; color: {C.TEXT_DIM};
+                background: {C.BG_INPUT};
                 border: 1px solid {C.DIVIDER}; border-radius: 8px;
-                font-size: 16px;
             }}
-            QPushButton:hover {{ background: {C.BG_HOVER}; color: {C.TEXT}; }}
+            QPushButton:hover {{ background: {C.BG_HOVER}; }}
         """)
         refresh.clicked.connect(self.reload)
         row.addWidget(refresh)
@@ -564,7 +575,8 @@ class SnippetsPage(QWidget):
 
         # New snippet form
         form = QFrame()
-        form.setStyleSheet(f"background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 10px;")
+        form.setObjectName("card")
+        form.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 10px; }}")
         fl = QVBoxLayout(form)
         fl.setContentsMargins(14, 12, 14, 12)
         fl.setSpacing(8)
@@ -690,15 +702,14 @@ class SnippetsPage(QWidget):
             head.addWidget(usage)
 
         head.addStretch()
-        del_btn = QPushButton("✕")
-        del_btn.setFixedSize(22, 22)
+        del_btn = QPushButton()
+        del_btn.setIcon(icons.icon("x", color=C.TEXT_FAINT, size=14))
+        del_btn.setIconSize(QSize(14, 14))
+        del_btn.setFixedSize(24, 24)
         del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         del_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; color: {C.TEXT_FAINT};
-                border: none; border-radius: 4px; font-size: 13px;
-            }}
-            QPushButton:hover {{ background: {C.BG_HOVER}; color: {C.ERR}; }}
+            QPushButton {{ background: transparent; border: none; border-radius: 6px; }}
+            QPushButton:hover {{ background: {C.BG_HOVER}; }}
         """)
         sid = s["id"]
         del_btn.clicked.connect(lambda: self._delete(sid))
@@ -1269,8 +1280,8 @@ class HomePage(QWidget):
 
         hour = datetime.now().hour
         greet = "Buenos días" if hour < 13 else ("Buenas tardes" if hour < 20 else "Buenas noches")
-        title = QLabel(f"{greet} 👋")
-        title.setStyleSheet(f"color: {C.TEXT}; font-size: 28px; font-weight: 600;")
+        title = QLabel(greet)
+        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 32px;")
         root.addWidget(title)
 
         shortcuts = QLabel(
@@ -1398,13 +1409,13 @@ class HubWindow(QWidget):
         sl.addWidget(w)
         sl.addSpacing(18)
 
-        self.btn_home = SidebarButton("🏠", "Home")
-        self.btn_insights = SidebarButton("📊", "Insights")
-        self.btn_hist = SidebarButton("🕐", "Historial")
-        self.btn_dict = SidebarButton("📖", "Diccionario")
-        self.btn_snip = SidebarButton("✨", "Snippets")
-        self.btn_trans = SidebarButton("🪄", "Transforms")
-        self.btn_set = SidebarButton("⚙️", "Ajustes")
+        self.btn_home = SidebarButton("home", "Home")
+        self.btn_insights = SidebarButton("insights", "Insights")
+        self.btn_hist = SidebarButton("history", "Historial")
+        self.btn_dict = SidebarButton("dictionary", "Diccionario")
+        self.btn_snip = SidebarButton("snippets", "Snippets")
+        self.btn_trans = SidebarButton("transforms", "Transforms")
+        self.btn_set = SidebarButton("settings", "Ajustes")
         for b in (self.btn_home, self.btn_insights, self.btn_hist, self.btn_dict, self.btn_snip, self.btn_trans, self.btn_set):
             sl.addWidget(b)
         sl.addStretch()

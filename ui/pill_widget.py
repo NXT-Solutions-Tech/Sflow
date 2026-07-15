@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import QWidget, QApplication
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPainter, QColor, QPainterPath, QPen, QPixmap
 from ui.audio_visualizer import AudioVisualizer
+from ui import theme
 from config import (
     PILL_WIDTH_IDLE,
     PILL_WIDTH_RECORDING,
@@ -308,7 +309,7 @@ class PillWidget(QWidget):
         icon_cy = h // 2
 
         if self._show_checkmark:
-            pen = QPen(QColor(80, 210, 120), 2)
+            pen = QPen(QColor(theme.tokens("dark")["success"]), 2)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)
@@ -327,7 +328,7 @@ class PillWidget(QWidget):
                 painter.drawEllipse(int(icon_cx + dx) - 1, int(icon_cy + dy) - 1, s, s)
 
         elif self._show_error:
-            pen = QPen(QColor(255, 70, 70), 2)
+            pen = QPen(QColor(theme.tokens("dark")["error"]), 2)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(pen)
             painter.drawLine(icon_cx - 3, icon_cy - 3, icon_cx + 3, icon_cy + 3)
