@@ -41,7 +41,7 @@ def _default_settings() -> dict:
         "llm_cleanup_enabled": False,  # OFF por default: fidelidad > limpieza. Opt-in en Hub si se desea auto-puntuacion.
         "llm_model": "llama-3.3-70b-versatile",  # modelo con mejor instruction-following (menos alucinaciones)
         "llm_cleanup_provider": "groq",  # "groq" (Llama) | "openrouter" (GLM). Default groq = comportamiento actual, GLM es opt-in.
-        "openrouter_cleanup_model": "z-ai/glm-4.6",  # slug OpenRouter para el proveedor GLM (verificar vigencia)
+        "openrouter_cleanup_model": "z-ai/glm-4.7-flash",  # slug OpenRouter para el proveedor GLM (verificar vigencia)
         "context_aware_tone": True,
         "smart_commands_enabled": True,
         "personal_dictionary_enabled": True,
@@ -120,7 +120,7 @@ WHISPER_LANGUAGE = "es"
 # entre releases — verificar en https://openrouter.ai/models antes de empaquetar.
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_CLEANUP_MODEL = "z-ai/glm-4.6"
+OPENROUTER_CLEANUP_MODEL = "z-ai/glm-4.7-flash"  # rapido y ~8x mas barato que glm-4.6, ideal para dictado
 OPENROUTER_TIMEOUT = 8.0
 
 # --- Catalogo de modelos STT seleccionables desde la app (Ajustes) ---

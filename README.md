@@ -94,7 +94,7 @@ either provider, selectable in **Ajustes → Procesamiento con LLM → Proveedor
 
 - **Groq · Llama** — default, uses your existing `GROQ_API_KEY`.
 - **OpenRouter · GLM** — set `OPENROUTER_API_KEY` in `.env` (get one at
-  [openrouter.ai/keys](https://openrouter.ai/keys)); defaults to the `z-ai/glm-4.6` model.
+  [openrouter.ai/keys](https://openrouter.ai/keys)); defaults to the `z-ai/glm-4.7-flash` model.
 
 Both are **fail-open**: if the network, key, or model errors out, SFlow pastes the raw
 transcript instead of blocking. In a packaged `.app`, `.env` lives at
