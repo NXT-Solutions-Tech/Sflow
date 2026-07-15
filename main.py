@@ -252,7 +252,8 @@ class SFlowApp(QObject):
 
     def start(self):
         self.hotkey.start()
-        self.pill.show()
+        # Do NOT force-show the pill at startup: it stays hidden while idle and
+        # fades in on the first dictation (set_state binds visibility to state).
         self.pill.set_state(PillWidget.STATE_IDLE)
 
     # ------- Regular transcription flow -------

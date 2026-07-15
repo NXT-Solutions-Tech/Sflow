@@ -3,7 +3,7 @@ from ctypes import c_void_p
 import AppKit
 import objc
 from PyQt6.QtWidgets import QWidget, QApplication
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPainter, QColor, QPainterPath, QPen, QPixmap
 from ui.audio_visualizer import AudioVisualizer
 from config import (
@@ -49,6 +49,7 @@ class PillWidget(QWidget):
         self._show_spinner = False
         self._show_error = False
         self._spinner_angle = 0
+        self._fade = None  # keep a ref to the running fade so it isn't GC'd
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -151,6 +152,42 @@ class PillWidget(QWidget):
         except Exception as e:
             print(f"Warning: native macOS setup failed: {e}")
 
+    def fade_in(self, duration: int = 150):
+        """Show the pill and fade opacity 0→1. No-op reset if already visible."""
+        if self._fade is not None:
+            self._fade.stop()
+        if not self.isVisible():
+            self.setWindowOpacity(0.0)
+            self.show()
+        anim = QPropertyAnimation(self, b"windowOpacity")
+        anim.setDuration(duration)
+        anim.setStartValue(self.windowOpacity())
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.start()
+        self._fade = anim
+
+    def fade_out(self, duration: int = 150):
+        """Fade opacity 1→0 then hide. No-op if already hidden."""
+        if not self.isVisible():
+            return
+        if self._fade is not None:
+            self._fade.stop()
+        anim = QPropertyAnimation(self, b"windowOpacity")
+        anim.setDuration(duration)
+        anim.setStartValue(self.windowOpacity())
+        anim.setEndValue(0.0)
+        anim.setEasingCurve(QEasingCurve.Type.InCubic)
+        anim.finished.connect(self._on_fade_out_done)
+        anim.start()
+        self._fade = anim
+
+    def _on_fade_out_done(self):
+        # Only hide if we're still meant to be gone — guards a rapid re-trigger
+        # that started a new fade-in before this fade-out finished.
+        if self._state == self.STATE_IDLE:
+            self.hide()
+
     def set_state(self, state: str):
         self._state = state
         self._show_checkmark = False
@@ -184,6 +221,13 @@ class PillWidget(QWidget):
             self.visualizer.setVisible(False)
             self.visualizer.stop()
             self._done_timer.start(1200)
+
+        # Visibility strictly bound to dictation state: the pill exists on screen
+        # only while dictating/processing/flashing a result. Idle = fully hidden.
+        if state == self.STATE_IDLE:
+            self.fade_out()
+        elif not self.isVisible() or self.windowOpacity() < 1.0:
+            self.fade_in()
 
         if not self._anim_timer.isActive():
             self._anim_timer.start()
