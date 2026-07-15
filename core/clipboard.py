@@ -5,6 +5,15 @@ from config import get_setting
 _saved_app: str | None = None
 
 
+def _as_literal(s: str) -> str:
+    """Escape a string for safe embedding in an AppleScript string literal.
+    Strips control chars (which would break out of the literal / inject new
+    statements) and escapes backslash + double-quote. Guards against a
+    maliciously-named frontmost app injecting AppleScript."""
+    s = "".join(c for c in (s or "") if c.isprintable())
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def save_frontmost_app():
     """Save the currently focused application before recording starts."""
     global _saved_app
@@ -49,7 +58,7 @@ def _restore_focus():
         return
     try:
         subprocess.run(
-            ["osascript", "-e", f'tell application "{_saved_app}" to activate'],
+            ["osascript", "-e", f'tell application "{_as_literal(_saved_app)}" to activate'],
             check=True, timeout=2,
         )
         time.sleep(0.12)

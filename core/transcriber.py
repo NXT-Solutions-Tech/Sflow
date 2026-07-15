@@ -5,6 +5,7 @@
 All post-processing steps are toggleable via settings.json.
 """
 import io
+import threading
 from config import get_setting, get_stt_model
 from core.transcriber_groq import GroqTranscriber
 from core.transcriber_local import LocalTranscriber
@@ -27,19 +28,23 @@ class Transcriber:
         # Cache de backends por clave (engine|model_id) para conservar el modelo
         # residente (warm) entre dictados. Groq se reusa siempre.
         self._backends = {}
+        # El warm de arranque (hilo aparte) y el primer dictado pueden entrar a
+        # _get_backend a la vez → doble carga del modelo (~1.6 GB). El lock lo evita.
+        self._backends_lock = threading.Lock()
 
     def _get_backend(self, engine: str, model_id: str):
         key = f"{engine}|{model_id}"
-        b = self._backends.get(key)
-        if b is None:
-            if engine == "parakeet":
-                b = ParakeetTranscriber(model_id)
-            elif engine == "whisper":
-                b = LocalTranscriber(model_id)
-            else:
-                b = self._groq
-            self._backends[key] = b
-        return b
+        with self._backends_lock:
+            b = self._backends.get(key)
+            if b is None:
+                if engine == "parakeet":
+                    b = ParakeetTranscriber(model_id)
+                elif engine == "whisper":
+                    b = LocalTranscriber(model_id)
+                else:
+                    b = self._groq
+                self._backends[key] = b
+            return b
 
     def _resolve(self):
         """Devuelve (backend, engine) segun el modelo activo, con fallback a Groq
@@ -75,7 +80,24 @@ class Transcriber:
         if engine in _VOCAB_ENGINES and get_setting("personal_dictionary_enabled", True):
             vocab = as_whisper_prompt()
 
-        raw = backend.transcribe(wav_buffer, vocabulary_prompt=vocab)
+        try:
+            raw = backend.transcribe(wav_buffer, vocabulary_prompt=vocab)
+        except Exception as e:
+            # A local engine can fail at RUNTIME even when importable — e.g. the
+            # one-time Hugging Face model download drops mid-way. `_resolve`'s
+            # `available` check only covers import failure, so fall back to Groq
+            # here instead of surfacing an error the user can't act on.
+            if engine != "groq":
+                from core.logger import log
+                log(f"local engine '{engine}' failed at runtime ({e}); falling back to Groq", "WARN")
+                backend, engine = self._groq, "groq"
+                try:
+                    wav_buffer.seek(0)
+                except Exception:
+                    pass
+                raw = backend.transcribe(wav_buffer, vocabulary_prompt=vocab)
+            else:
+                raise
         if not raw:
             return "", backend.model_id
 

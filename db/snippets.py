@@ -5,6 +5,7 @@ After transcription, any trigger matching (case-insensitive, word-boundary)
 is replaced inline by its expansion.
 """
 import sqlite3
+from contextlib import closing
 from config import DB_PATH
 
 
@@ -14,7 +15,7 @@ class SnippetsDB:
         self._init()
 
     def _init(self):
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS snippets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +37,7 @@ class SnippetsDB:
                 conn.executemany("INSERT INTO snippets (trigger, expansion) VALUES (?, ?)", defaults)
 
     def list_all(self) -> list[dict]:
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 "SELECT * FROM snippets ORDER BY usage_count DESC, trigger"
@@ -48,7 +49,7 @@ class SnippetsDB:
         expansion = expansion or ""
         if not trigger or not expansion:
             raise ValueError("trigger y expansion son requeridos")
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             c = conn.execute(
                 "INSERT INTO snippets (trigger, expansion) VALUES (?, ?)",
                 (trigger, expansion),
@@ -56,18 +57,18 @@ class SnippetsDB:
             return c.lastrowid
 
     def update(self, snippet_id: int, trigger: str, expansion: str):
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute(
                 "UPDATE snippets SET trigger = ?, expansion = ? WHERE id = ?",
                 (trigger.strip().lower(), expansion, snippet_id),
             )
 
     def delete(self, snippet_id: int):
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute("DELETE FROM snippets WHERE id = ?", (snippet_id,))
 
     def increment_usage(self, snippet_id: int):
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute(
                 "UPDATE snippets SET usage_count = usage_count + 1 WHERE id = ?",
                 (snippet_id,),

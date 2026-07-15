@@ -45,6 +45,10 @@ class HotkeyListener(QObject):
     transform_triggered = pyqtSignal(int)  # index 0..7 (Option+1..8)
     hands_free_started = pyqtSignal()
     hands_free_stopped = pyqtSignal()
+    command_pressed = pyqtSignal()          # Ctrl+Shift hold → Command Mode
+    command_released = pyqtSignal()
+    hub_requested = pyqtSignal()            # Cmd+Shift+H → open Hub
+    paste_last_requested = pyqtSignal()     # Cmd+Ctrl+V → paste last transcript
 
     def __init__(self):
         super().__init__()
@@ -163,6 +167,13 @@ class HotkeyListener(QObject):
         # Global utility hotkeys (only when idle — not during recording)
         if not self._recording:
             ch = self._key_char(key)
+            # Cmd+Shift+H → open Hub · Cmd+Ctrl+V → paste last transcript.
+            if ch == "h" and self._cmd_held and self._shift_held and not self._alt_held:
+                self.hub_requested.emit()
+                return
+            if ch == "v" and self._cmd_held and self._ctrl_held and not self._alt_held:
+                self.paste_last_requested.emit()
+                return
             # Option+1..8 → fire transform N (Wispr Flow convention)
             # Note: on macOS, Option+digit produces special characters:
             #   Option+1 = ¡, Option+2 = ™, Option+3 = £, Option+4 = ¢, Option+5 = ∞,
@@ -183,6 +194,15 @@ class HotkeyListener(QObject):
                     return
 
         if self._recording:
+            return
+
+        # Command Mode: Ctrl+Shift hold (no Alt/Cmd). Distinct from Ctrl+Alt.
+        if self._ctrl_held and self._shift_held and not self._alt_held and not self._cmd_held:
+            self._recording = True
+            self._command_mode = True
+            self._hands_free = False
+            _log("emit command_pressed (Ctrl+Shift hold)")
+            self.command_pressed.emit()
             return
 
         # Normal hold: Ctrl+Alt
@@ -237,6 +257,14 @@ class HotkeyListener(QObject):
             self._alt_held = False
         elif is_shift:
             self._shift_held = False
+
+        # Command Mode ends as soon as Ctrl or Shift is released.
+        if self._command_mode and (is_ctrl or is_shift):
+            self._recording = False
+            self._command_mode = False
+            _log("emit command_released")
+            self.command_released.emit()
+            return
 
         if not self._recording or self._hands_free:
             return

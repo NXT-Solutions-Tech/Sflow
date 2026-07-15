@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 from datetime import date, timedelta
 from config import DB_PATH
 
@@ -25,7 +26,7 @@ class TranscriptionDB:
         self._init_db()
 
     def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS transcriptions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,7 +58,7 @@ class TranscriptionDB:
                model: str = "whisper-large-v3-turbo", audio_path: str = None,
                app: str = None) -> int:
         word_count = len((text or "").split())
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             cursor = conn.execute(
                 "INSERT INTO transcriptions (text, language, duration_seconds, model, audio_path, app, word_count) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -67,7 +68,7 @@ class TranscriptionDB:
 
     def insights(self) -> dict:
         """Aggregate stats for the Insights page: totals, WPM, per-app, streak, per-day."""
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.row_factory = sqlite3.Row
             t = conn.execute(
                 "SELECT COUNT(*) c, COALESCE(SUM(word_count),0) w, COALESCE(SUM(duration_seconds),0) s "
@@ -88,14 +89,14 @@ class TranscriptionDB:
         }
 
     def update_text(self, row_id: int, new_text: str):
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute(
                 "UPDATE transcriptions SET text = ? WHERE id = ?",
                 (new_text, row_id),
             )
 
     def get_recent(self, limit: int = 20) -> list:
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 "SELECT * FROM transcriptions ORDER BY created_at DESC LIMIT ?",
@@ -104,13 +105,13 @@ class TranscriptionDB:
             return [dict(row) for row in rows]
 
     def get(self, row_id: int) -> dict | None:
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.row_factory = sqlite3.Row
             r = conn.execute("SELECT * FROM transcriptions WHERE id = ?", (row_id,)).fetchone()
             return dict(r) if r else None
 
     def search(self, query: str, limit: int = 20) -> list:
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 "SELECT * FROM transcriptions WHERE text LIKE ? ORDER BY created_at DESC LIMIT ?",
@@ -119,15 +120,17 @@ class TranscriptionDB:
             return [dict(row) for row in rows]
 
     def count(self) -> int:
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             return conn.execute("SELECT COUNT(*) FROM transcriptions").fetchone()[0]
 
     def prune_old_audio_paths(self, days: int = 7) -> list[str]:
         """Return paths of WAVs older than `days` so caller can unlink them. Clears audio_path in DB."""
         import os
         from datetime import datetime, timedelta
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
-        with sqlite3.connect(self.db_path) as conn:
+        # Match SQLite's CURRENT_TIMESTAMP format ("YYYY-MM-DD HH:MM:SS", space
+        # separator, no microseconds) so the string comparison is correct.
+        cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             rows = conn.execute(
                 "SELECT id, audio_path FROM transcriptions WHERE audio_path IS NOT NULL AND created_at < ?",
                 (cutoff,),

@@ -57,7 +57,7 @@ class TransformHandler:
                 temperature=0.3,
                 max_tokens=2000,
             )
-            result = completion.choices[0].message.content.strip()
+            result = (completion.choices[0].message.content or "").strip()
             if result.startswith("```") and result.endswith("```"):
                 result = result.strip("`").strip()
             return result or selected_text

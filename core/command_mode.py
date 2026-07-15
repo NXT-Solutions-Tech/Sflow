@@ -86,7 +86,11 @@ class CommandModeHandler:
 
     def _get_client(self) -> Groq:
         if self._client is None:
-            key = os.getenv("GROQ_API_KEY", "")
+            # Keychain-first (matches transcriber_groq/transform/llm_cleanup);
+            # falls back to env. Using os.getenv alone broke Command Mode for
+            # users whose key lives only in the Keychain.
+            from core.secrets import get_key
+            key = get_key("GROQ_API_KEY")
             if not key:
                 raise ValueError("GROQ_API_KEY not configured")
             self._client = Groq(api_key=key, timeout=12.0)
@@ -112,7 +116,7 @@ class CommandModeHandler:
                 temperature=0.4,
                 max_tokens=2000,
             )
-            result = completion.choices[0].message.content.strip()
+            result = (completion.choices[0].message.content or "").strip()
             if result.startswith("```") and result.endswith("```"):
                 result = result.strip("`").strip()
             return result or selected_text

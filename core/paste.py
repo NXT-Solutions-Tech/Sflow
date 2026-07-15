@@ -19,6 +19,14 @@ _saved_app: str | None = None
 _saved_clipboard: str | None = None
 
 
+def _as_literal(s: str) -> str:
+    """Escape a string for safe embedding in an AppleScript string literal —
+    strips control chars and escapes backslash + double-quote so a
+    maliciously-named frontmost app can't inject AppleScript."""
+    s = "".join(c for c in (s or "") if c.isprintable())
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
 # ---------- Focus management ----------
 def save_frontmost_app():
     global _saved_app
@@ -67,7 +75,7 @@ def _restore_focus():
     # Fallback: AppleScript
     try:
         subprocess.run(
-            ["osascript", "-e", f'tell application "{_saved_app}" to activate'],
+            ["osascript", "-e", f'tell application "{_as_literal(_saved_app)}" to activate'],
             check=True, timeout=2,
         )
         time.sleep(0.12)

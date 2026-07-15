@@ -153,10 +153,22 @@ class FirstRunDialog(QDialog):
             QMessageBox.warning(self, "Error", "La clave debe comenzar con 'gsk_' y tener al menos 20 caracteres.")
             return
 
+        # Primary store: macOS Keychain (matches how the Hub saves keys).
+        try:
+            from core.secrets import set_key
+            set_key("GROQ_API_KEY", key)
+        except Exception:
+            pass
+        # Fallback/interop: also write .env, but 0600 (owner-only) not the
+        # default world-readable 0644, so the key isn't readable by other users.
         env_path = os.path.join(APP_DATA_DIR, ".env")
         os.makedirs(APP_DATA_DIR, exist_ok=True)
         with open(env_path, "w") as f:
             f.write(f"GROQ_API_KEY={key}\n")
+        try:
+            os.chmod(env_path, 0o600)
+        except OSError:
+            pass
 
         os.environ["GROQ_API_KEY"] = key
         self.accept()
@@ -283,6 +295,11 @@ class SFlowApp(QObject):
         self.hotkey.transform_triggered.connect(self._on_transform, Qt.ConnectionType.QueuedConnection)
         self.hotkey.hands_free_started.connect(self.red_dot.start, Qt.ConnectionType.QueuedConnection)
         self.hotkey.hands_free_stopped.connect(self.red_dot.stop, Qt.ConnectionType.QueuedConnection)
+        # Command Mode (Ctrl+Shift hold) + Cmd+Shift+H (Hub) + Cmd+Ctrl+V (paste last)
+        self.hotkey.command_pressed.connect(self._on_command_pressed, Qt.ConnectionType.QueuedConnection)
+        self.hotkey.command_released.connect(self._on_command_released, Qt.ConnectionType.QueuedConnection)
+        self.hotkey.hub_requested.connect(self._on_hub_requested, Qt.ConnectionType.QueuedConnection)
+        self.hotkey.paste_last_requested.connect(self._on_paste_last, Qt.ConnectionType.QueuedConnection)
 
         self.transcription_done.connect(self._on_transcription_done, Qt.ConnectionType.QueuedConnection)
         self.transcription_error.connect(self._on_transcription_error, Qt.ConnectionType.QueuedConnection)
@@ -294,6 +311,31 @@ class SFlowApp(QObject):
         # Do NOT force-show the pill at startup: it stays hidden while idle and
         # fades in on the first dictation (set_state binds visibility to state).
         self.pill.set_state(PillWidget.STATE_IDLE)
+        # Privacy/retention: delete retry-WAVs older than 7 days on each launch
+        # (off-thread so a slow disk never delays startup).
+        threading.Thread(target=self._prune_old_audio, daemon=True).start()
+
+    def _prune_old_audio(self):
+        try:
+            for p in self.db.prune_old_audio_paths(days=7):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+        except Exception as e:
+            log_exc("audio prune failed", e)
+
+    def shutdown(self):
+        """Best-effort teardown on quit: stop the global hotkey listener and any
+        in-flight audio stream so PortAudio/pynput close cleanly."""
+        try:
+            self.hotkey.stop()
+        except Exception:
+            pass
+        try:
+            self.recorder.stop()
+        except Exception:
+            pass
 
     # ------- Regular transcription flow -------
     @pyqtSlot()
@@ -354,7 +396,9 @@ class SFlowApp(QObject):
         log(f"transcribe start: duration={duration:.2f}s, audio_path={audio_path}")
         try:
             text, model_id = self.transcriber.transcribe(wav_buffer)
-            log(f"transcribe ok: model={model_id}, chars={len(text) if text else 0}, text[:60]={(text or '')[:60]!r}")
+            # Privacy: never log transcript CONTENT — dictations may contain
+            # passwords, 2FA codes, private messages. Log length only.
+            log(f"transcribe ok: model={model_id}, chars={len(text) if text else 0}")
             if text:
                 self._pending_audio_path = audio_path
                 self.transcription_done.emit(text, duration, model_id)
@@ -367,7 +411,7 @@ class SFlowApp(QObject):
 
     @pyqtSlot(str, float, str)
     def _on_transcription_done(self, text: str, duration: float, model_id: str):
-        log(f"transcription_done: chars={len(text)}, text[:60]={text[:60]!r}")
+        log(f"transcription_done: chars={len(text)}")
         final_text = text
         try:
             paste_text(final_text)
@@ -591,6 +635,7 @@ def main():
 
     sflow = SFlowApp()
     sflow.start()
+    app.aboutToQuit.connect(sflow.shutdown)
 
     def open_hub():
         try:
