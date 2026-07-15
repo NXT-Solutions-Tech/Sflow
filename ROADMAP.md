@@ -86,11 +86,6 @@ A 4-agent audit (backend, security, UX-vs-Wispr, stability) ran on the whole app
 security/reliability findings were **fixed** on `feat/visual-refactor` (see CLAUDE.md
 "Auto-Blindaje log"). The remaining items are product/UX bets, prioritized:
 
-### Blocking / decision
-- [ ] **Purge the 33 voice recordings from git history** (`audio/*.wav` are reachable on
-  `origin` — the earlier commit only untracked them). Needs a `git filter-repo` +
-  force-push and a public/private check. **Awaiting user approval** (destructive).
-
 ### High-value UX (Wispr-parity)
 - [ ] **Permission onboarding wizard** — guided mic + Accessibility + Input Monitoring
   with live "granted ✓" polling (today only the API key is asked; Input Monitoring is

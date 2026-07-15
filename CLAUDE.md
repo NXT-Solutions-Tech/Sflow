@@ -349,13 +349,6 @@ The PRP contains all the architectural decisions, gotchas, and anti-patterns dis
 - **Tests:** 19 → **42** (router fallback, pipeline order, hotkey state machine, smart
   commands, dictionary learner, snippets, transform bounds, hallucination filter).
 
-### OPEN — needs a human decision
-- **H1 (HIGH): 33 real voice recordings are in git history and pushed to `origin`.** The
-  earlier commit only *untracked* `audio/`; the blobs remain reachable on
-  `NXT-Solutions-Tech/Sflow`. Removing them requires a history rewrite
-  (`git filter-repo --path audio/ --invert-paths`) + **force-push**, and checking whether
-  the repo is public / has forks. Destructive — do not run without explicit approval.
-
 ### Deferred UX bets (see ROADMAP "Post-audit backlog")
 Permission-onboarding wizard, optional API key for local-only users, idle discoverability
 / coach mark, real-time transcription preview, informative error surfacing, configurable
