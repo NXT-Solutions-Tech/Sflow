@@ -315,3 +315,49 @@ The PRP contains all the architectural decisions, gotchas, and anti-patterns dis
 | .app blocked by macOS | Run `xattr -cr /Applications/SFlow.app` to remove quarantine |
 | First-run dialog invisible | Bug if NSApplicationActivationPolicyAccessory is set before dialog. Already fixed |
 | Transcription hangs forever | API timeout is 10s. Check your GROQ_API_KEY is valid |
+
+## Auto-Blindaje log — full audit (2026-07-15)
+
+> SaaS Factory principle: *error occurs → fix → DOCUMENT → never recurs.* A 4-agent
+> audit (backend, security, UX-vs-Wispr, stability) ran against the whole app. Fixes
+> landed on `feat/visual-refactor`; the rest is triaged below.
+
+### Fixed (hardening committed)
+- **Privacy:** stopped logging transcript **content** (`main.py` logged `text[:60]` to
+  `sflow.log` — dictations can hold passwords/2FA). Log length only. `sflow.log` now
+  rotates at ~1 MB (was unbounded).
+- **AppleScript injection:** the frontmost-app name is interpolated into `osascript`
+  (`paste.py`, `clipboard.py`). A maliciously-named `.app` could inject AppleScript →
+  now escaped/stripped via `_as_literal`.
+- **Secrets:** `FirstRunDialog` now writes the key to the **Keychain** (primary) and the
+  `.env` fallback as **0600** (was world-readable 0644). Command Mode reads the key via
+  `secrets.get_key` (Keychain-first), not `os.getenv` — it silently no-op'd for
+  Keychain-only users.
+- **Audio retention:** `prune_old_audio_paths(7d)` existed but had **zero callers** →
+  now runs on launch and unlinks the WAVs.
+- **SQLite leak:** `with sqlite3.connect(...) as conn` commits but never **closes** →
+  wrapped all of `db/` in `contextlib.closing`.
+- **Reliability:** lock on `Transcriber._backends` (warm raced first dictation → double
+  model load); Groq fallback when a local engine fails **at runtime** (e.g. HF download
+  drop), not just on import; `.content or ""` guards in command_mode/transform (None →
+  crash → silent no-op); prune timestamp format matches SQLite's `CURRENT_TIMESTAMP`.
+- **Dead hotkeys:** Command Mode (Ctrl+Shift), Cmd+Shift+H (Hub), Cmd+Ctrl+V (paste last)
+  had `main.py` handlers that were **never connected** → wired in `hotkey.py` +
+  `SFlowApp`, covered by `tests/test_hotkey.py`. Also fixed the README, which mislabeled
+  push-to-talk as Ctrl+Shift (it is **Ctrl+Alt**).
+- **Cleanup on quit:** `app.aboutToQuit` → stop the pynput listener + audio stream.
+- **Tests:** 19 → **42** (router fallback, pipeline order, hotkey state machine, smart
+  commands, dictionary learner, snippets, transform bounds, hallucination filter).
+
+### OPEN — needs a human decision
+- **H1 (HIGH): 33 real voice recordings are in git history and pushed to `origin`.** The
+  earlier commit only *untracked* `audio/`; the blobs remain reachable on
+  `NXT-Solutions-Tech/Sflow`. Removing them requires a history rewrite
+  (`git filter-repo --path audio/ --invert-paths`) + **force-push**, and checking whether
+  the repo is public / has forks. Destructive — do not run without explicit approval.
+
+### Deferred UX bets (see ROADMAP "Post-audit backlog")
+Permission-onboarding wizard, optional API key for local-only users, idle discoverability
+/ coach mark, real-time transcription preview, informative error surfacing, configurable
+hotkey, persist pill drag position, live full Hub re-skin on theme change, WCAG contrast
+on faint tokens, Hub keyboard/focus a11y, history filters.

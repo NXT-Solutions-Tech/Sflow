@@ -79,3 +79,40 @@ dictating/processing, then fades out and is fully hidden. No persistent idle pil
 - **Deferred (noted):** raw-text preservation for "undo AI edit" (Wispr parity) — deferred
   from M2 to a future pass; dashboard footer still says "Groq Whisper" (cosmetic).
 - **Open decision:** none blocking.
+
+## Post-audit backlog (2026-07-15)
+
+A 4-agent audit (backend, security, UX-vs-Wispr, stability) ran on the whole app. The
+security/reliability findings were **fixed** on `feat/visual-refactor` (see CLAUDE.md
+"Auto-Blindaje log"). The remaining items are product/UX bets, prioritized:
+
+### Blocking / decision
+- [ ] **Purge the 33 voice recordings from git history** (`audio/*.wav` are reachable on
+  `origin` — the earlier commit only untracked them). Needs a `git filter-repo` +
+  force-push and a public/private check. **Awaiting user approval** (destructive).
+
+### High-value UX (Wispr-parity)
+- [ ] **Permission onboarding wizard** — guided mic + Accessibility + Input Monitoring
+  with live "granted ✓" polling (today only the API key is asked; Input Monitoring is
+  never surfaced, so hotkeys can silently fail).
+- [ ] **Optional API key for local-only users** — the default model is offline yet the app
+  refuses to start without a `gsk_` key. Offer "Continue offline".
+- [ ] **Real-time / pre-paste transcription preview** — biggest "premium feel" lever;
+  today only a spinner shows during processing.
+- [ ] **Informative error surfacing** — every failure collapses to a 1.2s red X; route the
+  error message to a pill tooltip / notification.
+- [ ] **Idle discoverability** — the pill is fully hidden when idle; add a coach mark or
+  optional idle nub with the hotkey tooltip.
+
+### Medium
+- [ ] Configurable push-to-talk hotkey (only the mouse button is selectable today).
+- [ ] Persist pill drag position (re-centers every dictation).
+- [ ] Live full-Hub re-skin on theme change (inline-styled pages re-skin only on reopen).
+- [ ] WCAG contrast pass on `text_faint` tokens (~2.3–3:1, below 4.5:1).
+- [ ] Hub keyboard nav + visible focus rings + `Switch` accessibleName.
+- [ ] History filters (by app / date / model — all already stored).
+
+### Low
+- [ ] Empty-state illustrations + primary CTA buttons.
+- [ ] Sidebar label language consistency (mixes EN/ES).
+- [ ] Consolidate serif titles onto the `QLabel[role="title"]` QSS role (currently inline).

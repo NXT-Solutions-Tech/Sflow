@@ -28,7 +28,7 @@ Built as a replacement for [Wispr Flow](https://wispr.com) ($15/month). SFlow us
 
 - **Native macOS app** — lives in the menu bar, no terminal needed, starts with your Mac
 - **System-wide dictation** — works in any app (VS Code, Chrome, Slack, Notes, etc.)
-- **Two recording modes** — hold Ctrl+Shift (push-to-talk) or double-tap Ctrl (hands-free)
+- **Two recording modes** — hold Ctrl+Alt (push-to-talk) or double-tap Ctrl (hands-free)
 - **Floating pill UI** — minimal overlay with real-time audio visualization bars
 - **No focus stealing** — pill floats above everything without interrupting your work (native macOS APIs)
 - **Auto-paste** — text appears exactly where your cursor was
@@ -106,9 +106,12 @@ transcript instead of blocking. In a packaged `.app`, `.env` lives at
 
 | Action | Shortcut |
 |--------|----------|
-| **Push-to-talk** | Hold `Ctrl+Shift`, speak, release |
+| **Push-to-talk** | Hold `Ctrl+Alt`, speak, release |
 | **Hands-free** | Double-tap `Ctrl` to start, tap `Ctrl` to stop |
-| **View history** | Open the Hub: menu bar → "Abrir Hub", or `Cmd+Shift+H` |
+| **Command Mode** | Hold `Ctrl+Shift`, speak an instruction → transforms the selected text via LLM |
+| **Transforms** | `Option+1…8` — apply the Nth custom transform to the selection |
+| **Open Hub** | `Cmd+Shift+H`, or menu bar → "Abrir Hub" |
+| **Paste last transcript** | `Cmd+Ctrl+V` |
 | **Start with macOS** | Toggle in menu bar → "Iniciar con macOS" |
 | **Quit** | Menu bar → "Salir" (or `Ctrl+C` in dev mode) |
 
