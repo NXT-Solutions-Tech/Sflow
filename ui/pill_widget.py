@@ -153,34 +153,54 @@ class PillWidget(QWidget):
             print(f"Warning: native macOS setup failed: {e}")
 
     def fade_in(self, duration: int = 150):
-        """Show the pill and fade opacity 0→1. No-op reset if already visible."""
+        """Show the pill and fade opacity 0→1. Guaranteed to end fully visible
+        even if the opacity animation is unsupported/interrupted on this build."""
         if self._fade is not None:
             self._fade.stop()
+            self._fade = None
         if not self.isVisible():
             self.setWindowOpacity(0.0)
             self.show()
-        anim = QPropertyAnimation(self, b"windowOpacity")
-        anim.setDuration(duration)
-        anim.setStartValue(self.windowOpacity())
-        anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        anim.start()
-        self._fade = anim
+            self.raise_()
+        try:
+            anim = QPropertyAnimation(self, b"windowOpacity")
+            anim.setDuration(duration)
+            anim.setStartValue(self.windowOpacity())
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            anim.finished.connect(lambda: self.setWindowOpacity(1.0))
+            anim.start()
+            self._fade = anim
+        except Exception:
+            self.setWindowOpacity(1.0)
+        # Safety net: force opaque shortly after, so a stalled/unsupported
+        # animation can never leave an invisible-but-recording pill.
+        QTimer.singleShot(duration + 80, self._ensure_opaque_if_active)
+
+    def _ensure_opaque_if_active(self):
+        if self._state != self.STATE_IDLE and self.isVisible() and self.windowOpacity() < 0.99:
+            self.setWindowOpacity(1.0)
 
     def fade_out(self, duration: int = 150):
-        """Fade opacity 1→0 then hide. No-op if already hidden."""
+        """Fade opacity 1→0 then hide. Guaranteed to end hidden."""
         if not self.isVisible():
             return
         if self._fade is not None:
             self._fade.stop()
-        anim = QPropertyAnimation(self, b"windowOpacity")
-        anim.setDuration(duration)
-        anim.setStartValue(self.windowOpacity())
-        anim.setEndValue(0.0)
-        anim.setEasingCurve(QEasingCurve.Type.InCubic)
-        anim.finished.connect(self._on_fade_out_done)
-        anim.start()
-        self._fade = anim
+            self._fade = None
+        try:
+            anim = QPropertyAnimation(self, b"windowOpacity")
+            anim.setDuration(duration)
+            anim.setStartValue(self.windowOpacity())
+            anim.setEndValue(0.0)
+            anim.setEasingCurve(QEasingCurve.Type.InCubic)
+            anim.finished.connect(self._on_fade_out_done)
+            anim.start()
+            self._fade = anim
+        except Exception:
+            self._on_fade_out_done()
+        # Safety net: ensure it actually hides even if the animation stalls.
+        QTimer.singleShot(duration + 80, self._on_fade_out_done)
 
     def _on_fade_out_done(self):
         # Only hide if we're still meant to be gone — guards a rapid re-trigger
