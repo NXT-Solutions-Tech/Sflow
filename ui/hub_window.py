@@ -32,6 +32,7 @@ import subprocess
 # stylesheets become theme-aware for free.
 from ui.theme import C  # noqa: E402
 from ui import icons  # noqa: E402
+from ui.components import Switch, primary_button, secondary_button  # noqa: E402
 
 
 # ---------- Helpers ----------
@@ -859,22 +860,31 @@ class SettingsPage(QWidget):
         self.provider_combo.setCurrentIndex(max(0, self.provider_combo.findData(get_setting("llm_cleanup_provider", "groq"))))
         al.addWidget(self.provider_combo)
 
-        self.context = QCheckBox("Adaptar tono según la app activa (Slack casual, Gmail formal…)")
+        self.context = Switch("Adaptar tono según la app activa (Slack casual, Gmail formal…)")
         self.context.setChecked(get_setting("context_aware_tone", True))
         al.addWidget(self.context)
 
         xl = group("Texto", gen)
-        self.commands = QCheckBox("Comandos de voz (\"nueva línea\", \"punto y aparte\", \"coma\")")
+        self.commands = Switch("Comandos de voz (\"nueva línea\", \"punto y aparte\", \"coma\")")
         self.commands.setChecked(get_setting("smart_commands_enabled", True))
         xl.addWidget(self.commands)
-        self.dict_toggle = QCheckBox("Usar diccionario personal como vocabulario")
+        self.dict_toggle = Switch("Usar diccionario personal como vocabulario")
         self.dict_toggle.setChecked(get_setting("personal_dictionary_enabled", True))
         xl.addWidget(self.dict_toggle)
-        self.subs_toggle = QCheckBox("Sustituciones de texto (btw → by the way)")
+        self.subs_toggle = Switch("Sustituciones de texto (btw → by the way)")
         self.subs_toggle.setChecked(get_setting("text_substitutions_enabled", True))
         xl.addWidget(self.subs_toggle)
 
         # ============ SYSTEM ============
+        ap = group("Apariencia", sysl)
+        ap.addWidget(dim("Tema"))
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Automático — sigue el sistema", "auto")
+        self.theme_combo.addItem("Claro", "light")
+        self.theme_combo.addItem("Oscuro", "dark")
+        self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(get_setting("theme", "auto"))))
+        ap.addWidget(self.theme_combo)
+
         pl = group("Inserción de texto", sysl)
         pl.addWidget(dim("Método de pegado"))
         self.paste_combo = QComboBox()
@@ -882,29 +892,29 @@ class SettingsPage(QWidget):
         self.paste_combo.addItem("Clipboard + Cmd+V — sobrescribe el portapapeles", "clipboard")
         self.paste_combo.setCurrentIndex(0 if get_setting("paste_backend", "keystroke") == "keystroke" else 1)
         pl.addWidget(self.paste_combo)
-        self.streaming = QCheckBox("Streaming paste (typing palabra-por-palabra)")
+        self.streaming = Switch("Streaming paste (typing palabra-por-palabra)")
         self.streaming.setChecked(get_setting("streaming_paste_enabled", False))
         pl.addWidget(self.streaming)
 
         snd = group("Sonido", sysl)
-        self.sound_start = QCheckBox("Sonido al empezar a dictar")
+        self.sound_start = Switch("Sonido al empezar a dictar")
         self.sound_start.setChecked(get_setting("sound_on_start", False))
         snd.addWidget(self.sound_start)
-        self.sound_done = QCheckBox("Sonido al terminar")
+        self.sound_done = Switch("Sonido al terminar")
         self.sound_done.setChecked(get_setting("sound_on_done", False))
         snd.addWidget(self.sound_done)
 
         bl = group("Comportamiento", sysl)
-        self.command_mode = QCheckBox("Command Mode (Ctrl+Shift hold → transforma selección con voz)")
+        self.command_mode = Switch("Command Mode (Ctrl+Shift hold → transforma selección con voz)")
         self.command_mode.setChecked(get_setting("command_mode_enabled", True))
         bl.addWidget(self.command_mode)
-        self.focus_mode = QCheckBox("Focus Mode (silencia apps distractoras al dictar)")
+        self.focus_mode = Switch("Focus Mode (silencia apps distractoras al dictar)")
         self.focus_mode.setChecked(get_setting("focus_mode_enabled", False))
         bl.addWidget(self.focus_mode)
-        self.save_audio = QCheckBox("Guardar audio para re-transcribir (historial)")
+        self.save_audio = Switch("Guardar audio para re-transcribir (historial)")
         self.save_audio.setChecked(get_setting("save_audio_for_retry", True))
         bl.addWidget(self.save_audio)
-        self.glass = QCheckBox("Liquid Glass en la pill (experimental — macOS 26+)")
+        self.glass = Switch("Liquid Glass en la pill (experimental — macOS 26+)")
         self.glass.setChecked(get_setting("liquid_glass_enabled", False))
         bl.addWidget(self.glass)
 
@@ -983,6 +993,21 @@ class SettingsPage(QWidget):
             get_setting("stt_model", "whisper-turbo-local"),
         )
 
+    def _apply_theme_live(self):
+        """Re-apply the global stylesheet for the chosen theme immediately.
+        Globally-styled surfaces (dialogs, menus, message boxes) and any window
+        opened afterward reflect it at once; the Hub's inline-styled content
+        fully re-skins on next open/restart."""
+        from PyQt6.QtWidgets import QApplication
+        from ui import theme as _theme, icons as _icons
+        app = QApplication.instance()
+        if app is None:
+            return
+        scheme = _theme.resolve_scheme(get_setting("theme", "auto"))
+        _theme.set_active_scheme(scheme)
+        _icons.clear_cache()
+        app.setStyleSheet(_theme.qss(scheme))
+
     def _relaunch(self):
         confirm = QMessageBox.question(
             self, "Reiniciar SFlow",
@@ -1011,6 +1036,8 @@ class SettingsPage(QWidget):
         set_setting("focus_mode_enabled", self.focus_mode.isChecked())
         set_setting("save_audio_for_retry", self.save_audio.isChecked())
         set_setting("liquid_glass_enabled", self.glass.isChecked())
+        set_setting("theme", self.theme_combo.currentData())
+        self._apply_theme_live()
         mb = self.mouse.currentData()
         set_setting("mouse_button_hotkey", mb if mb else None)
         # API keys → Keychain (only when the user typed a new value)
