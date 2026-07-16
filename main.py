@@ -17,15 +17,15 @@ import multiprocessing
 # salir antes de llegar a main(). Debe ser lo PRIMERO que corre.
 multiprocessing.freeze_support()
 from PyQt6.QtWidgets import (
-    QApplication, QSystemTrayIcon, QMenu,
-    QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox,
+    QApplication, QSystemTrayIcon, QMenu, QDialog, QToolTip,
 )
-from PyQt6.QtCore import Qt, QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, QObject, QPoint, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QIcon, QPixmap, QAction
 
 from ui.pill_widget import PillWidget
 from ui.hub_window import HubWindow
 from ui.red_dot_indicator import RedDotIndicator
+from ui.onboarding_wizard import OnboardingWizard
 from core.recorder import AudioRecorder
 from core.transcriber import Transcriber
 from core.transcriber_groq import GroqTranscriber
@@ -35,88 +35,34 @@ from core.command_mode import CommandModeHandler, copy_selection
 from core.transform import TransformHandler
 from core.relaunch import relaunch_app
 from core.logger import log, log_exc
+from core.onboarding import (
+    classify_error, error_message, has_api_key,
+    accessibility_trusted, open_settings_pane, ACCESSIBILITY_PANE,
+)
 from db.database import TranscriptionDB
 from web.server import start_web_server
-from config import LOGO_PATH, APP_DATA_DIR, AUDIO_DIR, get_setting
+from config import (
+    LOGO_PATH, APP_DATA_DIR, AUDIO_DIR, SETTINGS_PATH, get_setting, set_setting,
+)
 
 
-def _ensure_accessibility() -> bool:
-    """Check Accessibility permission. Triggers macOS prompt on first call.
-
-    After every .app rebuild the ad-hoc code signature changes, so macOS
-    silently revokes Accessibility — keystroke paste then fails without an
-    error. We detect that and open the Privacy panel so the user can re-add
-    SFlow without hunting through System Settings.
-    """
-    trusted = True
+def _accessibility_startup_nudge():
+    """Non-blocking recovery for the silent post-rebuild Accessibility
+    revocation. New users are guided through Accessibility by the onboarding
+    wizard; this only catches the case where an already-onboarded install lost
+    the permission (ad-hoc signature changed → macOS silently revoked trust,
+    keystroke paste then fails without any error). We re-register SFlow in the
+    Accessibility list and open the Privacy pane — no blocking dialog. Live
+    paste failures are additionally surfaced on the pill (see _do_paste)."""
     try:
-        from ApplicationServices import AXIsProcessTrustedWithOptions
-        trusted = bool(AXIsProcessTrustedWithOptions({"AXTrustedCheckOptionPrompt": True}))
+        if not accessibility_trusted(prompt=True):
+            open_settings_pane(ACCESSIBILITY_PANE)
     except Exception:
-        return True
-
-    if not trusted:
-        try:
-            subprocess.Popen([
-                "open",
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-            ])
-        except Exception:
-            pass
-        try:
-            QMessageBox.warning(
-                None,
-                "SFlow necesita Accessibility",
-                "Después de un rebuild macOS revoca el permiso. Abre System Settings → "
-                "Privacy & Security → Accessibility y vuelve a marcar SFlow. "
-                "Luego reinicia la app desde el menu del tray.",
-            )
-        except Exception:
-            pass
-    return trusted
+        pass
 
 
 _LAUNCH_AGENT_LABEL = "so.saasfactory.sflow"
 _PLIST_PATH = os.path.expanduser(f"~/Library/LaunchAgents/{_LAUNCH_AGENT_LABEL}.plist")
-
-
-class FirstRunDialog(QDialog):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("SFlow — Setup")
-        self.setFixedWidth(420)
-
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel("Ingresa tu Groq API Key para transcripciones:"))
-
-        link = QLabel('<a href="https://console.groq.com/keys">Obtener gratis en console.groq.com/keys</a>')
-        link.setOpenExternalLinks(True)
-        layout.addWidget(link)
-
-        self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText("gsk_...")
-        self.key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        layout.addWidget(self.key_input)
-
-        save_btn = QPushButton("Guardar y continuar")
-        save_btn.clicked.connect(self._save_key)
-        layout.addWidget(save_btn)
-
-        self.setLayout(layout)
-
-    def _save_key(self):
-        key = self.key_input.text().strip()
-        if not key.startswith("gsk_") or len(key) < 20:
-            QMessageBox.warning(self, "Error", "La clave debe comenzar con 'gsk_' y tener al menos 20 caracteres.")
-            return
-
-        env_path = os.path.join(APP_DATA_DIR, ".env")
-        os.makedirs(APP_DATA_DIR, exist_ok=True)
-        with open(env_path, "w") as f:
-            f.write(f"GROQ_API_KEY={key}\n")
-
-        os.environ["GROQ_API_KEY"] = key
-        self.accept()
 
 
 def _is_launch_at_login() -> bool:
@@ -326,15 +272,40 @@ class SFlowApp(QObject):
             log_exc("transcribe FAILED", e)
             self.transcription_error.emit(str(e))
 
+    def _notify(self, message: str):
+        """Brief, non-focus-stealing tooltip near the pill with actionable text.
+        Offline, auto-hiding — the pill itself is too small to hold a message."""
+        if not message:
+            return
+        try:
+            top_left = self.pill.mapToGlobal(self.pill.rect().topLeft())
+            QToolTip.showText(QPoint(top_left.x(), top_left.y() - 6), message, self.pill)
+        except Exception:
+            pass
+
+    def _do_paste(self, text: str) -> bool:
+        """Paste text into the frontmost app. On failure (e.g. Accessibility
+        revoked) flip the pill to ERROR — never the misleading DONE checkmark —
+        and surface an actionable hint. Returns True only on a real paste."""
+        try:
+            paste_text(text)
+            log("paste ok")
+            return True
+        except Exception as e:
+            log_exc("paste FAILED", e)
+            self.pill.set_state(PillWidget.STATE_ERROR)
+            kind = classify_error(e)
+            # A paste failure is almost always an Accessibility denial; default
+            # to that hint unless the exception clearly says otherwise.
+            self._notify(error_message(e) if kind != "unknown"
+                         else "Falta permiso de Accesibilidad")
+            return False
+
     @pyqtSlot(str, float, str)
     def _on_transcription_done(self, text: str, duration: float, model_id: str):
         log(f"transcription_done: chars={len(text)}, text[:60]={text[:60]!r}")
         final_text = text
-        try:
-            paste_text(final_text)
-            log("paste ok")
-        except Exception as e:
-            log_exc("paste FAILED", e)
+        paste_ok = self._do_paste(final_text)
         self._last_text = final_text
         audio_path = getattr(self, "_pending_audio_path", None)
         self._pending_audio_path = None
@@ -346,7 +317,10 @@ class SFlowApp(QObject):
             )
         except Exception as e:
             log_exc("db.insert FAILED", e)
-        self.pill.set_state(PillWidget.STATE_DONE)
+        # Only claim success when the paste actually landed; _do_paste already
+        # showed ERROR + hint on failure.
+        if paste_ok:
+            self.pill.set_state(PillWidget.STATE_DONE)
 
     @pyqtSlot()
     def _on_hub_requested(self):
@@ -392,8 +366,17 @@ class SFlowApp(QObject):
 
     @pyqtSlot(str)
     def _on_transcription_error(self, error: str):
-        log(f"ERROR state: {error}", level="ERROR")
+        kind = classify_error(error)
+        msg = error_message(error)
+        if kind == "silence":
+            # Silence is not a failure — no red X, just a gentle heads-up.
+            log(f"no speech (silence): {error}")
+            self._notify(msg)
+            self.pill.set_state(PillWidget.STATE_IDLE)
+            return
+        log(f"ERROR state: kind={kind} raw={error}", level="ERROR")
         self.pill.set_state(PillWidget.STATE_ERROR)
+        self._notify(msg)
 
     # ------- Command Mode flow -------
     @pyqtSlot()
@@ -446,9 +429,9 @@ class SFlowApp(QObject):
 
     @pyqtSlot(str)
     def _on_command_done(self, result: str):
-        paste_text(result)
-        self._last_text = result
-        self.pill.set_state(PillWidget.STATE_DONE)
+        if self._do_paste(result):
+            self._last_text = result
+            self.pill.set_state(PillWidget.STATE_DONE)
 
 
 def _install_safe_excepthook():
@@ -524,11 +507,21 @@ def main():
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    api_key = os.getenv("GROQ_API_KEY", "")
-    if not api_key:
-        dialog = FirstRunDialog()
-        if dialog.exec() != QDialog.DialogCode.Accepted:
+    # First-run: guided permissions wizard. We consider the user already
+    # onboarded if they finished it before, already have a key, or carry an
+    # existing settings.json (upgrade from a pre-wizard build) — so we never
+    # nag returning users. The API key is OPTIONAL: the default STT model is
+    # local/offline, and the wizard only requires a key for cloud models.
+    onboarded = (
+        get_setting("onboarding_completed", False)
+        or has_api_key()
+        or os.path.exists(SETTINGS_PATH)
+    )
+    if not onboarded:
+        wizard = OnboardingWizard()
+        if wizard.exec() != QDialog.DialogCode.Accepted:
             sys.exit(0)
+        set_setting("onboarding_completed", True)
 
     try:
         import AppKit
@@ -537,7 +530,10 @@ def main():
         pass
 
     port = start_web_server()
-    _ensure_accessibility()
+    if onboarded:
+        # Returning users skip the wizard, so catch a silent post-rebuild
+        # Accessibility revocation here (non-blocking).
+        _accessibility_startup_nudge()
 
     sflow = SFlowApp()
     sflow.start()
