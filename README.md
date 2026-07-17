@@ -35,7 +35,8 @@ Built as a replacement for [Wispr Flow](https://wispr.com) ($15/month). SFlow us
 - **Native Hub** — light+dark dashboard (Cmd+Shift+H) to browse history, edit the dictionary, snippets, transforms, insights and settings
 - **SQLite history** — every transcription saved locally with timestamp and duration
 - **Multilingual** — supports all languages Whisper supports (English, Spanish, French, etc.)
-- **First-run setup** — asks for your Groq API key on first launch, no config files to edit
+- **Guided first-run** — walks you through the microphone and the two macOS permissions,
+  with a live mic test and "granted ✓" polling. No config files to edit.
 
 ---
 
@@ -46,7 +47,8 @@ Built as a replacement for [Wispr Flow](https://wispr.com) ($15/month). SFlow us
 - macOS 15+
 - Python 3.12+
 - [Homebrew](https://brew.sh)
-- [Groq API key](https://console.groq.com/keys) (free tier available)
+- [Groq API key](https://console.groq.com/keys) — **optional**, free tier available. Only
+  needed for the cloud models or Auto Cleanup; the default engine runs on your Mac.
 
 ### Install (Desktop App — Recommended)
 
@@ -71,7 +73,11 @@ ditto dist/SFlow.app /Applications/SFlow.app
 xattr -cr /Applications/SFlow.app
 ```
 
-Open SFlow from Spotlight or `/Applications`. On first launch it asks for your [Groq API key](https://console.groq.com/keys).
+Open SFlow from Spotlight or `/Applications`. On first launch a short wizard tests your
+microphone and walks you through the two macOS permissions SFlow needs (Accessibility, so
+it can type for you; Input Monitoring, so it can hear the hotkey). The
+[Groq API key](https://console.groq.com/keys) step is optional — skip it with **"Continuar
+sin conexión"** and SFlow transcribes entirely on your Mac.
 
 ### Install (Dev Mode)
 

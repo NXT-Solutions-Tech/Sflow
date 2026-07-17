@@ -87,15 +87,15 @@ security/reliability findings were **fixed** on `feat/visual-refactor` (see CLAU
 "Auto-Blindaje log"). The remaining items are product/UX bets, prioritized:
 
 ### High-value UX (Wispr-parity)
-- [ ] **Permission onboarding wizard** — guided mic + Accessibility + Input Monitoring
-  with live "granted ✓" polling (today only the API key is asked; Input Monitoring is
-  never surfaced, so hotkeys can silently fail).
-- [ ] **Optional API key for local-only users** — the default model is offline yet the app
-  refuses to start without a `gsk_` key. Offer "Continue offline".
+- [x] **Permission onboarding wizard** — `ui/onboarding_wizard.py`, shipped on
+  `feat/onboarding` (2026-07-17). Mic (live level test) + Accessibility + Input Monitoring
+  with "Concedido ✓" polling. Also the rescue flow when a rebuild revokes a grant.
+- [x] **Optional API key for local-only users** — `onboarding.api_key_required()`. The key
+  step only appears for a cloud model or Auto Cleanup; otherwise "Continuar sin conexión".
+- [x] **Informative error surfacing** — `core/error_messages.py` → tray toast. Also fixed
+  the pill flashing DONE on a failed paste.
 - [ ] **Real-time / pre-paste transcription preview** — biggest "premium feel" lever;
   today only a spinner shows during processing.
-- [ ] **Informative error surfacing** — every failure collapses to a 1.2s red X; route the
-  error message to a pill tooltip / notification.
 - [ ] **Idle discoverability** — the pill is fully hidden when idle; add a coach mark or
   optional idle nub with the hotkey tooltip.
 
@@ -110,4 +110,7 @@ security/reliability findings were **fixed** on `feat/visual-refactor` (see CLAU
 ### Low
 - [ ] Empty-state illustrations + primary CTA buttons.
 - [ ] Sidebar label language consistency (mixes EN/ES).
+- [ ] Push Instrument Serif onto card/section titles. Page headers moved to sans
+  (`role="page"`), so the serif now only appears on the wizard's welcome hero — the other
+  half of the Wispr language (serif card titles) is still unclaimed.
 - [ ] Consolidate serif titles onto the `QLabel[role="title"]` QSS role (currently inline).

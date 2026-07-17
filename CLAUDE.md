@@ -40,8 +40,10 @@ see "Critical: ad-hoc rebuild → silent Accessibility revocation" below.
 
 The .app bundle is self-contained (~478MB — INCLUYE el stack MLX: mlx-whisper +
 parakeet-mlx + librosa/numba/scipy + los Metal .metallib). No Python, no venv,
-no terminal. On first launch, if no API key exists in
-`~/Library/Application Support/SFlow/.env`, a dialog asks for it. Menu-bar app.
+no terminal. Menu-bar app. On first launch the **onboarding wizard** runs
+(micrófono → Accesibilidad → Input Monitoring → API key opcional); la key SOLO se
+pide si el modelo activo es de nube o si Auto Cleanup está encendido — el default
+(`whisper-turbo-local`) arranca sin key.
 
 ### Modelos de transcripción SELECCIONABLES (v2.6, 12-jul-2026)
 Catálogo en `config.py` → `STT_MODELS` (3), elegible en Hub → Ajustes → "Modelo":
@@ -110,6 +112,9 @@ sflow/
 ├── ui/
 │   ├── pill_widget.py           # NSPanel + Liquid Glass (NSVisualEffectView)
 │   ├── audio_visualizer.py      # FFT + spring physics 60Hz
+│   ├── theme.py                 # Design system: tokens + central QSS (light+dark)
+│   ├── components.py            # page_title, Switch, primary/secondary/ghost_button
+│   ├── onboarding_wizard.py     # First-run: mic + Accessibility + Input Monitoring + key
 │   └── settings_dialog.py       # QDialog for all toggles
 ├── core/
 │   ├── recorder.py              # sounddevice capture
@@ -122,6 +127,9 @@ sflow/
 │   ├── smart_commands.py        # "nueva línea" → \n, "coma" → ", ", etc.
 │   ├── command_mode.py          # Select+speak+LLM transform flow
 │   ├── hotkey.py                # 4 modes (hold, double-tap, command, mouse)
+│   ├── permissions.py           # TCC probes (AX / CGPreflightListenEvent) — None = unknown
+│   ├── onboarding.py            # Which steps to show; api_key_required(); mic_ok()
+│   ├── error_messages.py        # Exception → code → actionable Spanish toast
 │   └── clipboard.py             # Focus save/restore + streaming paste
 ├── db/database.py               # SQLite history (model column tracks backend used)
 ├── web/server.py                # Flask dashboard localhost:5678
@@ -224,10 +232,15 @@ Recordings under 0.3 seconds are accidental taps — skip transcription and retu
 - **Bundle mode**: read-only assets (logo) come from `sys._MEIPASS`, writable data (DB, .env) goes to `~/Library/Application Support/SFlow/`
 
 ### 7. Desktop App Features (main.py)
-- **System Tray**: QSystemTrayIcon in menu bar with dashboard link, "Start with macOS" toggle, quit
-- **First-Run Dialog**: If GROQ_API_KEY is empty, shows a QDialog to enter it (saves to Application Support)
+- **System Tray**: QSystemTrayIcon in menu bar with dashboard link, "Start with macOS" toggle, quit.
+  Also the delivery vehicle for error toasts (`SFlowApp.notify`).
+- **Onboarding wizard** (`ui/onboarding_wizard.py`): runs from `_run_onboarding_if_needed()`.
+  Steps are planned by `core/onboarding.plan_steps()` — granted permissions are skipped, and
+  the API key step only appears when `api_key_required()` says so. Replaced the old
+  FirstRunDialog + `_ensure_accessibility()`.
 - **Launch at Login**: Creates/removes a LaunchAgent plist in `~/Library/LaunchAgents/`
-- **Hide from Dock**: `NSApplicationActivationPolicyAccessory` via PyObjC (MUST be set AFTER first-run dialog)
+- **Hide from Dock**: `NSApplicationActivationPolicyAccessory` via PyObjC (MUST be set AFTER
+  the onboarding wizard — it needs focus to be usable)
 
 ### 8. Port Selection (web/server.py)
 Default port is 5678 (not 5000 which conflicts with AirPlay on macOS 12+). Auto-scans for free port.
@@ -265,12 +278,22 @@ in-memory code while its on-disk binary mismatches, compounding confusion.
 a Developer ID certificate. Persistent team identifier → TCC preserves trust
 across rebuilds. Not worth it for personal use; accept the manual re-approve.
 
-**Detection in code:** `main._ensure_accessibility()` catches this at startup
-via `AXIsProcessTrustedWithOptions` and auto-opens the Privacy panel plus a
-QMessageBox explaining the fix. This covers the "user rebuilt and the new
-process can't paste" case, but NOT the "old process still running with now-
-invalidated binary" case — that one requires killing the process, which is
-what `install.sh` does.
+**Detection in code:** `main._run_onboarding_if_needed()` catches this at startup.
+`core/permissions.snapshot()` probes Accessibility + Input Monitoring; when either
+reads `False`, `onboarding.needs_onboarding()` reopens the wizard and
+`plan_steps()` narrows it to just the revoked step — the rescue flow and the
+first-run flow are the same machinery. The step polls `AXIsProcessTrusted` live
+and flips to "Concedido ✓" the moment you re-add SFlow, so you don't have to
+guess whether it took.
+
+This covers the "user rebuilt and the new process can't paste" case, but NOT the
+"old process still running with now-invalidated binary" case — that one requires
+killing the process, which is what `install.sh` does.
+
+(Superseded: `_ensure_accessibility()` + its QMessageBox. It only ever checked
+Accessibility — never Input Monitoring — and returned `True` when its import
+failed, so a broken probe looked exactly like a granted permission. The probes in
+`core/permissions.py` return `None` for "unknown" and the step is shown anyway.)
 
 ## Customization
 
@@ -350,7 +373,51 @@ The PRP contains all the architectural decisions, gotchas, and anti-patterns dis
   commands, dictionary learner, snippets, transform bounds, hallucination filter).
 
 ### Deferred UX bets (see ROADMAP "Post-audit backlog")
-Permission-onboarding wizard, optional API key for local-only users, idle discoverability
-/ coach mark, real-time transcription preview, informative error surfacing, configurable
-hotkey, persist pill drag position, live full Hub re-skin on theme change, WCAG contrast
-on faint tokens, Hub keyboard/focus a11y, history filters.
+~~Permission-onboarding wizard~~, ~~optional API key for local-only users~~, idle
+discoverability / coach mark, real-time transcription preview, ~~informative error
+surfacing~~, configurable hotkey, persist pill drag position, live full Hub re-skin on
+theme change, WCAG contrast on faint tokens, Hub keyboard/focus a11y, history filters.
+(Struck items shipped in the Onboarding milestone below.)
+
+## Milestone "Onboarding & Confianza" (2026-07-17, `feat/onboarding`)
+
+> Same principle: *the app must never fail silently.* Three of the app's failure modes
+> were invisible by construction. Tests 42 → **179**.
+
+### The silent failures that got fixed
+- **Input Monitoring was never requested.** It's the permission pynput needs, and without
+  it the listener never fires — `core/hotkey.py` doesn't raise and `listener.running` still
+  reads `True`, so the app looks healthy while being completely deaf. Now a wizard step,
+  via `CGRequestListenEventAccess` (the preflight never prompts).
+- **A failed paste flashed a green checkmark.** `_on_transcription_done` caught the
+  exception, logged it, and set `STATE_DONE` anyway. Now ERROR + a toast saying the text
+  is in the history. `_on_command_done` had no try/except at all.
+- **Every error was the same red X.** The message reached the slot and was discarded.
+  Now `core/error_messages.py` maps it to actionable copy on a tray toast.
+- **The app refused to start without a `gsk_` key** it doesn't need — the default engine is
+  on-device. `onboarding.api_key_required()` gates the key step; otherwise "Continuar sin
+  conexión". It also read `os.getenv`, ignoring the Keychain where the app puts the key.
+
+### Gotchas worth remembering
+- **Probes must fail SAFE.** The old `_ensure_accessibility()` returned `True` when its
+  import failed → a broken framework was indistinguishable from a granted permission.
+  Everything in `core/permissions.py` returns `None` for "couldn't ask", and
+  `plan_steps()` shows the step anyway. Never treat unknown as granted.
+- **`CGPreflightListenEventAccess`, not `IOHIDCheckAccess`** — the latter isn't exposed on
+  `Quartz.CoreGraphics`. Needs no new dependency.
+- **Don't add AVFoundation for the mic check.** Opening a real stream triggers the same TCC
+  prompt AND proves the device produces signal — a muted/dead/wrong mic reports
+  "authorized". Saves a fragile `collect_all` on a big framework.
+- **Wizard side effects belong in `on_enter` (fired from `showEvent`), never `__init__`** —
+  otherwise `scripts/preview_surfaces.py` opens a mic stream and prompts for TCC just by
+  rendering a PNG.
+- **`AudioVisualizer` paints hardcoded white bars** (built for the dark pill) → invisible on
+  the cream light theme. The wizard nests it in a dark `#vizStage` frame instead of
+  restyling it.
+- **Qt QSS has no `letter-spacing`** — tracking needs `QFont.setLetterSpacing` in Python
+  (see `ui/components.page_title`).
+- **`pyobjc-framework-ApplicationServices` was only a transitive dep** of Quartz while
+  `main.py` imported it directly. Now pinned in requirements.txt.
+- **Onboarding is never a gate.** If the wizard raises it's logged and the app starts —
+  and it does *not* record `onboarding_seen_version`, so a one-off failure can't
+  permanently skip onboarding.
