@@ -48,6 +48,10 @@ def _isolate_settings(tmp_path, monkeypatch):
                 monkeypatch.setattr(mod, attr, str(data_dir / filename))
 
     config._SETTINGS = config._default_settings()
+    # Pin the UI language so string assertions don't depend on the machine's
+    # locale (default is "auto" → QLocale). Tests that exercise English set it
+    # explicitly. Spanish is the source language.
+    config._SETTINGS["language"] = "es"
 
     # Secrets keeps process-global state (runtime overrides + a per-path .env
     # cache). Without clearing it a key stored in one test would bleed into the

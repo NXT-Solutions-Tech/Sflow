@@ -44,68 +44,8 @@ class Toast(NamedTuple):
     body: str
 
 
-_MESSAGES = {
-    CODE_SILENCE: Toast(
-        CODE_SILENCE, "No se detectó voz",
-        "Mantén el atajo presionado mientras hablas.",
-    ),
-    CODE_HALLUCINATION: Toast(
-        CODE_HALLUCINATION, "No se detectó voz",
-        "Solo se oyó ruido de fondo. Acércate al micrófono e intenta de nuevo.",
-    ),
-    CODE_NO_KEY: Toast(
-        CODE_NO_KEY, "Falta la API key",
-        "Este modelo usa la nube. Añade tu key en Ajustes o cambia a Whisper Turbo local.",
-    ),
-    CODE_AUTH: Toast(
-        CODE_AUTH, "API key inválida",
-        "Groq rechazó tu key. Revísala en el Hub → Ajustes.",
-    ),
-    CODE_RATE_LIMIT: Toast(
-        CODE_RATE_LIMIT, "Límite de Groq alcanzado",
-        "Espera un momento o cambia a Whisper Turbo local en Ajustes.",
-    ),
-    CODE_OFFLINE: Toast(
-        CODE_OFFLINE, "Sin conexión",
-        "Groq necesita internet. Cambia a Whisper Turbo local en Ajustes para dictar offline.",
-    ),
-    CODE_TIMEOUT: Toast(
-        CODE_TIMEOUT, "Groq tardó demasiado",
-        "La red va lenta. Reintenta o cambia a Whisper Turbo local en Ajustes.",
-    ),
-    CODE_SERVER: Toast(
-        CODE_SERVER, "Groq no responde",
-        "El servicio falló. Reintenta en un momento o usa Whisper Turbo local.",
-    ),
-    CODE_PERMISSION: Toast(
-        CODE_PERMISSION, "Falta permiso de Accesibilidad",
-        "SFlow no puede escribir en otras apps. Concédelo en Ajustes del sistema.",
-    ),
-    CODE_PASTE_FAILED: Toast(
-        CODE_PASTE_FAILED, "No se pudo pegar",
-        "Falta el permiso de Accesibilidad. Tu texto está guardado en el historial.",
-    ),
-    CODE_NO_SELECTION: Toast(
-        CODE_NO_SELECTION, "No hay texto seleccionado",
-        "Selecciona el texto que quieres transformar y vuelve a intentarlo.",
-    ),
-    CODE_DB_CORRUPT: Toast(
-        CODE_DB_CORRUPT, "Historial dañado",
-        "El archivo de historial estaba corrupto. SFlow empezó uno nuevo y guardó el anterior por si acaso.",
-    ),
-    CODE_RECORDING_CAPPED: Toast(
-        CODE_RECORDING_CAPPED, "Grabación detenida",
-        "Manos libres se detuvo sola al llegar al límite de tiempo. Tu dictado se está procesando.",
-    ),
-    CODE_MODEL_MISSING: Toast(
-        CODE_MODEL_MISSING, "Modelo no descargado",
-        "Este modelo local aún no está en tu Mac. Descárgalo en Ajustes → Modelo.",
-    ),
-    CODE_UNKNOWN: Toast(
-        CODE_UNKNOWN, "Algo falló",
-        "No se pudo completar el dictado. Revisa sflow.log si se repite.",
-    ),
-}
+# The user-facing copy lives in core/i18n.py under keys "err.<code>.title/.body"
+# (es + en). message_for() builds the Toast from there in the active language.
 
 # Groq SDK class names → code. Matched by name so the SDK stays unimported.
 _EXCEPTION_NAMES = {
@@ -150,9 +90,13 @@ def classify_exception(exc: BaseException) -> str:
 
 
 def message_for(code: str) -> Toast:
-    """The user-facing toast for a code. Unknown codes degrade to the generic
-    message rather than raising — a bad code must never break error reporting."""
-    return _MESSAGES.get(code, _MESSAGES[CODE_UNKNOWN])
+    """The user-facing toast for a code, in the active language. Unknown codes
+    degrade to the generic message rather than raising — a bad code must never
+    break error reporting."""
+    from core.i18n import tr
+    if code not in CODES:
+        code = CODE_UNKNOWN
+    return Toast(code, tr(f"err.{code}.title"), tr(f"err.{code}.body"))
 
 
 def should_notify(code: str, last_code: str, last_ts: float,

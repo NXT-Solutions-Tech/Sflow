@@ -35,6 +35,7 @@ from core.transform import TransformHandler
 from core.relaunch import relaunch_app
 from core.logger import log, log_exc
 from core import error_messages, onboarding, permissions, sounds
+from core.i18n import tr
 from core.secrets import get_key
 from db.database import TranscriptionDB
 from config import (
@@ -185,28 +186,28 @@ def _setup_tray(app: QApplication, open_hub) -> QSystemTrayIcon:
 
     menu = QMenu()
 
-    status = QAction("SFlow — Activo", menu)
+    status = QAction(tr("tray.status"), menu)
     status.setEnabled(False)
     menu.addAction(status)
     menu.addSeparator()
 
-    hub_action = QAction("Abrir Hub  (⌘⇧H)", menu)
+    hub_action = QAction(tr("tray.open_hub"), menu)
     hub_action.triggered.connect(open_hub)
     menu.addAction(hub_action)
     menu.addSeparator()
 
-    login_action = QAction("Iniciar con macOS", menu)
+    login_action = QAction(tr("tray.launch_login"), menu)
     login_action.setCheckable(True)
     login_action.setChecked(_is_launch_at_login())
     login_action.toggled.connect(_set_launch_at_login)
     menu.addAction(login_action)
     menu.addSeparator()
 
-    relaunch_action = QAction("Reiniciar SFlow", menu)
+    relaunch_action = QAction(tr("tray.relaunch"), menu)
     relaunch_action.triggered.connect(relaunch_app)
     menu.addAction(relaunch_action)
 
-    quit_action = QAction("Salir", menu)
+    quit_action = QAction(tr("tray.quit"), menu)
     quit_action.triggered.connect(app.quit)
     menu.addAction(quit_action)
 
@@ -217,7 +218,7 @@ def _setup_tray(app: QApplication, open_hub) -> QSystemTrayIcon:
     tray.activated.connect(_activate)
 
     tray.setContextMenu(menu)
-    tray.setToolTip("SFlow — Voice to Text")
+    tray.setToolTip(tr("tray.tooltip"))
     tray.show()
     return tray
 

@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.models import DownloadCancelled, ModelManager, catalog_entry
+from core.i18n import tr
 from ui import theme
 from ui.components import ghost_button, primary_button
 
@@ -63,7 +64,7 @@ class ModelDownloadDialog(QDialog):
         entry = catalog_entry(repo_id)
         size = entry.get("size_mb", 0)
 
-        self.setWindowTitle("Descargar modelo")
+        self.setWindowTitle(tr("download.title"))
         self.setModal(True)
         self.setFixedWidth(420)
         t = theme.tokens(theme.active_scheme())
@@ -76,7 +77,7 @@ class ModelDownloadDialog(QDialog):
         title.setStyleSheet(f"color: {t['text']}; font-size: 15px; font-weight: 600;")
         root.addWidget(title)
 
-        sub = QLabel(f"Descarga única · ~{size} MB · se guarda en tu Mac para uso offline.")
+        sub = QLabel(tr("download.subtitle", size=size))
         sub.setWordWrap(True)
         sub.setStyleSheet(f"color: {t['text_dim']}; font-size: 12px;")
         root.addWidget(sub)
@@ -87,16 +88,16 @@ class ModelDownloadDialog(QDialog):
         self.bar.setTextVisible(True)
         root.addWidget(self.bar)
 
-        self.status = QLabel("Preparando…")
+        self.status = QLabel(tr("download.preparing"))
         self.status.setStyleSheet(f"color: {t['text_dim']}; font-size: 12px;")
         root.addWidget(self.status)
 
         bar = QHBoxLayout()
         bar.addStretch()
-        self._cancel_btn = ghost_button("Cancelar")
+        self._cancel_btn = ghost_button(tr("download.cancel"))
         self._cancel_btn.clicked.connect(self._on_cancel)
         bar.addWidget(self._cancel_btn)
-        self._close_btn = primary_button("Listo")
+        self._close_btn = primary_button(tr("download.done_btn"))
         self._close_btn.setVisible(False)
         self._close_btn.clicked.connect(self.accept)
         bar.addWidget(self._close_btn)
@@ -115,7 +116,7 @@ class ModelDownloadDialog(QDialog):
     def _on_progress(self, frac: float):
         pct = int(frac * 100)
         self.bar.setValue(pct)
-        self.status.setText(f"Descargando… {pct}%")
+        self.status.setText(tr("download.progress", pct=pct))
 
     def _finish_thread(self):
         try:
@@ -127,14 +128,14 @@ class ModelDownloadDialog(QDialog):
     def _on_finished(self, path: str):
         self.result_path = path
         self.bar.setValue(100)
-        self.status.setText("Descarga completa ✓")
+        self.status.setText(tr("download.complete"))
         self._cancel_btn.setVisible(False)
         self._close_btn.setVisible(True)
         self._finish_thread()
 
-    def _on_failed(self, msg: str):
-        self.status.setText("No se pudo descargar. Revisa tu conexión e intenta de nuevo.")
-        self._cancel_btn.setText("Cerrar")
+    def _on_failed(self, _msg: str):
+        self.status.setText(tr("download.failed"))
+        self._cancel_btn.setText(tr("download.cancel"))
         self._finish_thread()
 
     def _on_cancelled(self):
@@ -142,7 +143,7 @@ class ModelDownloadDialog(QDialog):
         self.reject()
 
     def _on_cancel(self):
-        self.status.setText("Cancelando…")
+        self.status.setText(tr("download.cancelling"))
         self._worker.cancel()
 
     def closeEvent(self, event):  # noqa: N802 - Qt

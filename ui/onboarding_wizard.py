@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 
 from config import APP_DATA_DIR, LOGO_PATH
 from core import onboarding, permissions
+from core.i18n import tr
 from core.onboarding import (
     STEP_ACCESSIBILITY, STEP_API_KEY, STEP_INPUT_MONITORING, STEP_MIC, STEP_MODEL,
     STEP_WELCOME,
@@ -391,13 +392,8 @@ class ModelStep(WizardStep):
 
     def __init__(self):
         super().__init__()
-        self.header(
-            "sparkles", "Mejor precisión (opcional)",
-            "Parakeet ya viene incluido y funciona offline. Whisper Turbo acierta más "
-            "en nombres y jerga; es una descarga única de ~1.6 GB que puedes hacer ahora "
-            "o después desde Ajustes → Modelo.",
-        )
-        self._btn = primary_button("Descargar Whisper Turbo (1.6 GB)")
+        self.header("sparkles", tr("wizard.model_title"), tr("wizard.model_body"))
+        self._btn = primary_button(tr("wizard.model_download"))
         self._btn.clicked.connect(self._download)
         self.root.addWidget(self._btn)
         self.status = _StatusLine()
@@ -407,7 +403,7 @@ class ModelStep(WizardStep):
     def on_enter(self):
         if ManagerCache.manager().is_available(self._WHISPER_REPO):
             self._btn.setEnabled(False)
-            self.status.set_granted("Ya descargado ✓")
+            self.status.set_granted(tr("wizard.model_have_it"))
 
     def _download(self):
         from ui.model_download import ModelDownloadDialog
@@ -415,10 +411,10 @@ class ModelStep(WizardStep):
         dlg.exec()
         if ManagerCache.manager().is_available(self._WHISPER_REPO):
             self._btn.setEnabled(False)
-            self.status.set_granted("Descargado ✓")
+            self.status.set_granted(tr("wizard.model_have_it"))
 
     def skip_label(self) -> str | None:
-        return "Después"  # always optional — the bundled engine already works
+        return tr("wizard.model_later")  # always optional — bundled engine works
 
     def can_continue(self) -> bool:
         return True

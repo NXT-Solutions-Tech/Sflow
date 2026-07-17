@@ -36,6 +36,9 @@ def _default_settings() -> dict:
         # Apariencia visual. "auto" sigue el modo claro/oscuro del sistema macOS;
         # "light" | "dark" fuerzan un tema. Ver ui/theme.py.
         "theme": "auto",
+        # Idioma de la interfaz. "auto" sigue el locale del sistema; "es" | "en"
+        # lo fuerzan. Ver core/i18n.py. (STT usa stt_language, aparte.)
+        "language": "auto",
         # Onboarding wizard: version last completed (0 = never). Bumping
         # ONBOARDING_VERSION in core/onboarding.py re-runs it. `snooze_until` is
         # a unix ts that suppresses the re-prompt after a revoked permission, so

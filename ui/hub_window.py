@@ -24,6 +24,7 @@ from core.recorder import list_input_devices
 from core.secrets import set_key, key_source
 from core.models import ModelManager, missing_code_for_selection
 from core import error_messages
+from core.i18n import tr
 
 _STT_BY_ID = {m["id"]: m for m in STT_MODELS}
 import os
@@ -301,7 +302,7 @@ class HistoryPage(QWidget):
         root.setContentsMargins(28, 22, 28, 22)
         root.setSpacing(14)
 
-        title = page_title("Historial")
+        title = page_title(tr("page.history"))
         root.addWidget(title)
 
         sub = QLabel("Tus transcripciones recientes. Click en una para expandir, ⋮ para acciones.")
@@ -453,7 +454,7 @@ class DictionaryPage(QWidget):
         root.setContentsMargins(28, 22, 28, 22)
         root.setSpacing(12)
 
-        title = page_title("Diccionario personal")
+        title = page_title(tr("page.dictionary"))
         root.addWidget(title)
 
         sub = QLabel("Una palabra o frase por línea (pista de vocabulario para Whisper: nombres, jerga, términos técnicos).\nPara sustituciones automáticas de texto usa una flecha:  btw -> by the way")
@@ -512,7 +513,7 @@ class SnippetsPage(QWidget):
         root.setContentsMargins(28, 22, 28, 22)
         root.setSpacing(14)
 
-        title = page_title("Snippets")
+        title = page_title(tr("page.snippets"))
         root.addWidget(title)
 
         sub = QLabel(
@@ -655,7 +656,7 @@ class SettingsPage(QWidget):
         root.setContentsMargins(28, 22, 28, 22)
         root.setSpacing(16)
 
-        title = page_title("Ajustes")
+        title = page_title(tr("page.settings"))
         root.addWidget(title)
 
         tabs = QTabWidget()
@@ -747,7 +748,7 @@ class SettingsPage(QWidget):
         self.model_dl_status = dim("")
         dlrow.addWidget(self.model_dl_status)
         dlrow.addStretch()
-        self.model_dl_btn = secondary_button("Descargar")
+        self.model_dl_btn = secondary_button(tr("settings.download"))
         self.model_dl_btn.clicked.connect(self._download_selected_model)
         dlrow.addWidget(self.model_dl_btn)
         tl.addLayout(dlrow)
@@ -761,6 +762,16 @@ class SettingsPage(QWidget):
         self.lang_combo.addItem("English", "en")
         self.lang_combo.setCurrentIndex(max(0, self.lang_combo.findData(get_setting("stt_language", "auto"))))
         tl.addWidget(self.lang_combo)
+
+        # App UI language (i18n) — distinct from the dictation language above.
+        tl.addWidget(dim(tr("settings.language")))
+        self.applang_combo = QComboBox()
+        self.applang_combo.addItem(tr("settings.lang_auto"), "auto")
+        self.applang_combo.addItem(tr("settings.lang_es"), "es")
+        self.applang_combo.addItem(tr("settings.lang_en"), "en")
+        self.applang_combo.setCurrentIndex(max(0, self.applang_combo.findData(get_setting("language", "auto"))))
+        tl.addWidget(self.applang_combo)
+        tl.addWidget(dim(tr("settings.lang_hint")))
 
         tl.addWidget(dim("Micrófono / entrada de audio"))
         self.mic_combo = QComboBox()
@@ -870,7 +881,7 @@ class SettingsPage(QWidget):
         relaunch_btn.clicked.connect(self._relaunch)
         bar.addWidget(relaunch_btn)
 
-        save = primary_button("Guardar ajustes")
+        save = primary_button(tr("settings.save"))
         save.clicked.connect(self._save)
         bar.addWidget(save)
         root.addLayout(bar)
@@ -944,9 +955,9 @@ class SettingsPage(QWidget):
         missing = code is not None
         self.model_dl_btn.setVisible(missing)
         if missing:
-            self.model_dl_status.setText("No descargado — necesario para dictar offline con este modelo.")
+            self.model_dl_status.setText(tr("settings.model_missing"))
         elif model.get("local"):
-            self.model_dl_status.setText("Descargado ✓ · listo para dictar offline.")
+            self.model_dl_status.setText(tr("settings.model_ready"))
         else:
             self.model_dl_status.setText("")
 
@@ -973,6 +984,7 @@ class SettingsPage(QWidget):
                 return  # still not downloaded — don't persist an unusable selection
         set_setting("stt_model", self.model_combo.currentData())
         set_setting("stt_language", self.lang_combo.currentData())
+        set_setting("language", self.applang_combo.currentData())
         set_setting("input_device", self.mic_combo.currentData())
         set_setting("auto_cleanup_level", self.cleanup_combo.currentData())
         set_setting("llm_cleanup_provider", self.provider_combo.currentData())
@@ -1013,7 +1025,7 @@ class SettingsPage(QWidget):
             if box.clickedButton() is restart_btn:
                 relaunch_app()
         else:
-            QMessageBox.information(self, "Guardado", "Ajustes guardados.")
+            QMessageBox.information(self, tr("settings.saved_title"), tr("settings.saved_body"))
 
 
 class InsightsPage(QWidget):
@@ -1025,7 +1037,7 @@ class InsightsPage(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 22, 28, 16)
         outer.setSpacing(16)
-        title = page_title("Insights")
+        title = page_title(tr("page.insights"))
         outer.addWidget(title)
 
         self._scroll = QScrollArea()
@@ -1367,13 +1379,13 @@ class HubWindow(QWidget):
         sl.addWidget(w)
         sl.addSpacing(18)
 
-        self.btn_home = SidebarButton("home", "Home")
-        self.btn_insights = SidebarButton("insights", "Insights")
-        self.btn_hist = SidebarButton("history", "Historial")
-        self.btn_dict = SidebarButton("dictionary", "Diccionario")
-        self.btn_snip = SidebarButton("snippets", "Snippets")
+        self.btn_home = SidebarButton("home", tr("nav.home"))
+        self.btn_insights = SidebarButton("insights", tr("nav.insights"))
+        self.btn_hist = SidebarButton("history", tr("nav.history"))
+        self.btn_dict = SidebarButton("dictionary", tr("nav.dictionary"))
+        self.btn_snip = SidebarButton("snippets", tr("nav.snippets"))
         self.btn_trans = SidebarButton("transforms", "Transforms")
-        self.btn_set = SidebarButton("settings", "Ajustes")
+        self.btn_set = SidebarButton("settings", tr("nav.settings"))
         for b in (self.btn_home, self.btn_insights, self.btn_hist, self.btn_dict, self.btn_snip, self.btn_trans, self.btn_set):
             sl.addWidget(b)
         sl.addStretch()
