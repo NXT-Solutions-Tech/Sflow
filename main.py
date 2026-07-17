@@ -27,7 +27,6 @@ from ui.hub_window import HubWindow
 from ui.red_dot_indicator import RedDotIndicator
 from core.recorder import AudioRecorder
 from core.transcriber import Transcriber
-from core.transcriber_groq import GroqTranscriber
 from core.hotkey import HotkeyListener
 from core.paste import paste_text, paste_last_transcript, save_frontmost_app
 from core.dictation_actions import extract_actions, perform_actions
@@ -243,7 +242,6 @@ class SFlowApp(QObject):
         # Warm-load del modelo local activo en background: deja el modelo residente
         # para que el PRIMER dictado ya salga en latencia warm (no cold-start).
         threading.Thread(target=self.transcriber.warm_active, daemon=True).start()
-        self.groq_raw = GroqTranscriber()  # raw STT for command mode (no LLM cleanup)
         self.command = CommandModeHandler()
         self.transform = TransformHandler()
         self.db = TranscriptionDB()
@@ -587,8 +585,9 @@ class SFlowApp(QObject):
 
     def _command_worker(self, wav_buffer, selection, duration):
         try:
-            # Command Mode always uses Groq (fast cloud STT) — bypass local backend
-            voice = self.groq_raw.transcribe(wav_buffer)
+            # Local-first raw STT: the audio stays on-device (only the LLM
+            # transform below may reach the cloud, per the configured provider).
+            voice = self.transcriber.transcribe_raw(wav_buffer)
             if not voice:
                 self.command_error.emit(error_messages.CODE_SILENCE)
                 return

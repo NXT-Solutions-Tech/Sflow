@@ -783,6 +783,7 @@ class SettingsPage(QWidget):
         self.provider_combo = QComboBox()
         self.provider_combo.addItem("Groq · Llama (nube)", "groq")
         self.provider_combo.addItem("OpenRouter · GLM (nube)", "openrouter")
+        self.provider_combo.addItem("Local · Qwen (offline)", "local")
         self.provider_combo.setCurrentIndex(max(0, self.provider_combo.findData(get_setting("llm_cleanup_provider", "groq"))))
         al.addWidget(self.provider_combo)
 
@@ -831,7 +832,7 @@ class SettingsPage(QWidget):
         snd.addWidget(self.sound_done)
 
         bl = group("Comportamiento", sysl)
-        self.command_mode = Switch("Command Mode (Ctrl+Shift hold → transforma selección con voz · envía audio y selección a la nube)")
+        self.command_mode = Switch("Command Mode (Ctrl+Shift hold → transforma selección con voz · el audio se transcribe local; la transformación usa el proveedor de limpieza configurado)")
         self.command_mode.setChecked(get_setting("command_mode_enabled", False))
         bl.addWidget(self.command_mode)
         self.save_audio = Switch("Guardar audio para re-transcribir (historial)")

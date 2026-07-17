@@ -86,6 +86,27 @@ class Transcriber:
             except Exception:
                 pass
 
+    def transcribe_raw(self, wav_buffer: io.BytesIO) -> str:
+        """Raw STT with the active local-first backend, no post-processing.
+
+        Command Mode uses this: the voice is an instruction ("hazlo más formal"),
+        not dictation to clean — so smart-commands / cleanup / snippets must not
+        touch it. Keeping it on the local engine means the audio stays on-device
+        (only the LLM transform may reach the cloud, per the configured provider)."""
+        backend, engine = self._resolve()
+        try:
+            return backend.transcribe(wav_buffer, vocabulary_prompt="") or ""
+        except ModelNotDownloaded:
+            raise
+        except Exception:
+            if engine != "groq":
+                try:
+                    wav_buffer.seek(0)
+                except Exception:
+                    pass
+                return self._groq.transcribe(wav_buffer, vocabulary_prompt="") or ""
+            raise
+
     def transcribe(self, wav_buffer: io.BytesIO) -> tuple[str, str]:
         """Returns (final_text, model_id_used)."""
         backend, engine = self._resolve()

@@ -9,6 +9,8 @@ Two selectable providers (setting `llm_cleanup_provider`), same system prompt:
 Ambos son fail-open: cualquier error/timeout/falta-de-key devuelve el texto crudo,
 nunca bloquea el pegado.
 """
+import threading
+
 import requests
 from groq import Groq
 import config
@@ -16,6 +18,11 @@ from config import LLM_CLEANUP_MODEL, get_setting
 from core.logger import log as _log
 from core.secrets import get_key
 from core.token_budget import max_tokens_for
+from core.models import ModelManager, ModelNotDownloaded
+
+# Small instruction-following model for offline cleanup. On-demand download; if
+# it's not present the fail-open path pastes the raw transcript.
+LOCAL_CLEANUP_REPO = "mlx-community/Qwen2.5-1.5B-Instruct-4bit"
 
 
 _BASE_RULES = """Eres un corrector MINIMO de transcripciones de voz. Tu trabajo es PRESERVAR la transcripcion casi intacta, solo haciendo los cambios ESTRICTAMENTE necesarios.
@@ -110,6 +117,12 @@ def _strip_fences(cleaned: str) -> str:
 class LLMCleanup:
     def __init__(self):
         self._client = None
+        # Local mlx-lm model, lazy-loaded once and kept resident. The lock stops
+        # two concurrent dictations from both loading it (same pattern as the
+        # STT router's _backends_lock).
+        self._local = None
+        self._local_lock = threading.Lock()
+        self._manager = ModelManager()
 
     def _get_client(self) -> Groq:
         if self._client is None:
@@ -129,12 +142,15 @@ class LLMCleanup:
         try:
             if provider == "openrouter":
                 cleaned = self._clean_openrouter(system_prompt, text)
+            elif provider == "local":
+                cleaned = self._clean_local(system_prompt, text)
             else:
                 cleaned = self._clean_groq(system_prompt, text)
             cleaned = _strip_fences(cleaned.strip())
             return cleaned or text
         except Exception:
-            # Fail-open: red caida, timeout, key mala, rate limit → nunca bloquea el pegado.
+            # Fail-open: red caida, timeout, key mala, rate limit, modelo local
+            # no descargado, mlx-lm ausente → nunca bloquea el pegado.
             return text
 
     def _clean_groq(self, system_prompt: str, text: str) -> str:
@@ -150,6 +166,34 @@ class LLMCleanup:
             max_tokens=max_tokens_for(text, floor=1500),
         )
         return completion.choices[0].message.content or ""
+
+    def _ensure_local(self):
+        """Lazy-load the mlx-lm model from a LOCAL path (never a bare repo id, so
+        it can't trigger a download). Raises ModelNotDownloaded / ImportError,
+        both of which the caller's fail-open turns into 'paste the raw text'."""
+        if self._local is None:
+            with self._local_lock:
+                if self._local is None:
+                    path = self._manager.resolve_path(LOCAL_CLEANUP_REPO)
+                    if not path:
+                        raise ModelNotDownloaded(LOCAL_CLEANUP_REPO)
+                    from mlx_lm import load
+                    self._local = load(path)
+        return self._local
+
+    def _clean_local(self, system_prompt: str, text: str) -> str:
+        from mlx_lm import generate
+        model, tokenizer = self._ensure_local()
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": text},
+        ]
+        prompt = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
+        out = generate(
+            model, tokenizer, prompt=prompt,
+            max_tokens=max_tokens_for(text, floor=1500), verbose=False,
+        )
+        return out or ""
 
     def _clean_openrouter(self, system_prompt: str, text: str) -> str:
         key = get_key("OPENROUTER_API_KEY")

@@ -26,12 +26,13 @@ sounddevice_datas = collect_data_files('_sounddevice_data')
 # --- Collect pynput backends ---
 pynput_hidden = collect_submodules('pynput')
 
-# --- Collect local STT stack (mlx-whisper + parakeet-mlx) ---
+# --- Collect local STT + LLM stack (mlx-whisper + parakeet-mlx + mlx-lm) ---
 # Bundlea MLX (incl. los Metal .metallib), pesos-loaders y tokenizers para que
-# los modelos locales corran DENTRO del .app. Si algun paquete no esta instalado
-# (p.ej. build en Intel), se omite y el runtime cae a Groq.
+# los modelos locales corran DENTRO del .app. mlx_lm da la limpieza LLM offline
+# (provider "local"). Si algun paquete no esta instalado (p.ej. build en Intel),
+# se omite y el runtime cae a Groq / fail-open.
 mlx_datas, mlx_binaries, mlx_hidden = [], [], []
-for pkg in ['mlx', 'mlx_whisper', 'parakeet_mlx', 'huggingface_hub', 'tiktoken', 'tiktoken_ext']:
+for pkg in ['mlx', 'mlx_whisper', 'mlx_lm', 'parakeet_mlx', 'huggingface_hub', 'tiktoken', 'tiktoken_ext']:
     try:
         d, b, h = collect_all(pkg)
         mlx_datas += d

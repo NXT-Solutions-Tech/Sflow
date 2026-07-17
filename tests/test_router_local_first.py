@@ -63,6 +63,24 @@ def test_downloaded_local_model_is_used_directly(monkeypatch):
     assert engine == "whisper"
 
 
+def test_transcribe_raw_uses_local_backend_without_postprocessing(monkeypatch):
+    """Command Mode's raw STT: local-first, and no smart-commands/cleanup/snippets
+    mangle the voice instruction."""
+    t = Transcriber()
+    monkeypatch.setattr("core.transcriber.get_stt_model", lambda: _model())
+    t._backends["whisper|m"] = FakeBackend(available=True, downloaded=True, text="hazlo mas formal")
+    assert t.transcribe_raw(io.BytesIO(b"x")) == "hazlo mas formal"
+
+
+def test_transcribe_raw_falls_back_to_groq_on_runtime_error(monkeypatch):
+    t = Transcriber()
+    monkeypatch.setattr("core.transcriber.get_stt_model", lambda: _model())
+    t._backends["whisper|m"] = FakeBackend(available=True, downloaded=True,
+                                           raises=RuntimeError("mlx boom"))
+    monkeypatch.setattr(t._groq, "transcribe", lambda buf, vocabulary_prompt="": "desde groq")
+    assert t.transcribe_raw(io.BytesIO(b"x")) == "desde groq"
+
+
 def test_runtime_model_not_downloaded_is_not_swallowed_into_groq(monkeypatch):
     """The false-error path this replaces: a missing model must surface as
     ModelNotDownloaded (→ CODE_MODEL_MISSING), never a silent Groq attempt."""

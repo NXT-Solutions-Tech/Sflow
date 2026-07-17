@@ -20,6 +20,10 @@ pyobjc-framework-ApplicationServices>=10.0
 # (mejor precision) · parakeet v3 ~280ms (mas rapido). Ambos seleccionables en Ajustes.
 mlx-whisper>=0.4.0
 parakeet-mlx>=0.3.0
+# Local LLM cleanup (offline provider). Optional at runtime — the Qwen 4-bit
+# weights are an on-demand download, and cleanup is fail-open, so a missing model
+# just means the raw transcript is pasted.
+mlx-lm>=0.19.0
 # Model weight management (ModelManager: availability check + on-demand download
 # with progress). Already a transitive dep of mlx-whisper; pinned here because
 # core/models.py imports it directly (snapshot_download).
