@@ -156,6 +156,25 @@ def test_a_broken_wizard_does_not_stop_the_app(settings, monkeypatch):
     main._run_onboarding_if_needed()  # must not raise
 
 
+def test_closing_the_wizard_midway_does_not_record_it(settings, monkeypatch):
+    """Reject (closed the window before finishing) must NOT mark onboarding seen,
+    or a half-finished run permanently skips the rescue flow."""
+    import ui.onboarding_wizard as ow
+
+    class Rejected:
+        def __init__(self, *a, **k):
+            pass
+
+        def exec(self):
+            return 0  # QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(ow, "OnboardingWizard", Rejected)
+
+    main._run_onboarding_if_needed()
+
+    assert "onboarding_seen_version" not in settings
+
+
 def test_a_broken_wizard_does_not_mark_onboarding_as_seen(settings, monkeypatch):
     """Otherwise a one-off failure would permanently skip onboarding."""
     import ui.onboarding_wizard as ow

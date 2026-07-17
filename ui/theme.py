@@ -54,7 +54,7 @@ _DARK = {
     "input_bg": "#1e1e1e",
     "text": "#ececec",
     "text_secondary": "#9a9a9a",
-    "text_faint": "#5c5c5c",
+    "text_faint": "#8a8a8a",       # WCAG AA: ≥4.5:1 on bg/surface (was #5c5c5c ≈ 2.9:1)
     "border": "#2a2a2a",
     "divider": "#242424",
     "accent": "#8c50dc",
@@ -74,7 +74,7 @@ _LIGHT = {
     "input_bg": "#ffffff",
     "text": "#2b2823",
     "text_secondary": "#6b6459",
-    "text_faint": "#a89e8f",
+    "text_faint": "#756b5d",       # WCAG AA: ≥4.5:1 on the cream bg (was #a89e8f ≈ 2.5:1)
     "border": "#e6ddce",
     "divider": "#ece4d6",
     "accent": "#8c50dc",
@@ -85,6 +85,24 @@ _LIGHT = {
     "warning": "#c9770a",
     "error": "#d94b45",
 }
+
+
+def _relative_luminance(hex_color: str) -> float:
+    """WCAG relative luminance of a #rrggbb color."""
+    h = hex_color.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+    def _lin(c):
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * _lin(r) + 0.7152 * _lin(g) + 0.0722 * _lin(b)
+
+
+def contrast_ratio(fg: str, bg: str) -> float:
+    """WCAG contrast ratio between two #rrggbb colors (1..21)."""
+    l1, l2 = _relative_luminance(fg), _relative_luminance(bg)
+    hi, lo = max(l1, l2), min(l1, l2)
+    return (hi + 0.05) / (lo + 0.05)
 
 
 def tokens(scheme: str) -> dict:

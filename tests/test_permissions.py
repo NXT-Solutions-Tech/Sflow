@@ -51,12 +51,14 @@ def test_probes_never_report_granted_on_failure(monkeypatch):
     assert permissions.input_monitoring_granted() is not True
 
 
-def test_snapshot_reports_both_gated_permissions(monkeypatch):
+def test_snapshot_reports_all_gated_permissions(monkeypatch):
     monkeypatch.setattr(permissions, "accessibility_granted", lambda prompt=False: True)
     monkeypatch.setattr(permissions, "input_monitoring_granted", lambda: False)
+    monkeypatch.setattr(permissions, "mic_granted", lambda: None)
     assert permissions.snapshot() == {
         permissions.PERM_ACCESSIBILITY: True,
         permissions.PERM_INPUT_MONITORING: False,
+        permissions.PERM_MIC: None,
     }
 
 

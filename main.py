@@ -20,11 +20,12 @@ import multiprocessing
 multiprocessing.freeze_support()
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PyQt6.QtCore import Qt, QObject, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QIcon, QPixmap, QAction
+from PyQt6.QtGui import QIcon, QPixmap, QAction, QActionGroup
 
 from ui.pill_widget import PillWidget
 from ui.hub_window import HubWindow
 from ui.red_dot_indicator import RedDotIndicator
+from ui.toast import ToastManager
 from core.recorder import AudioRecorder
 from core.transcriber import Transcriber
 from core.hotkey import HotkeyListener
@@ -124,14 +125,17 @@ def _run_onboarding_if_needed():
                                   offer_model_download=offer_model)
     try:
         from ui.onboarding_wizard import OnboardingWizard
-        OnboardingWizard(steps, key_required=key_required).exec()
+        from PyQt6.QtWidgets import QDialog
+        result = OnboardingWizard(steps, key_required=key_required).exec()
     except Exception as e:
         # Onboarding is a helper, never a gate: if it breaks, the app still runs.
         log_exc("onboarding wizard failed (suppressed)", e)
         return
-    # Written even when steps were skipped — the user has seen the flow, and
-    # re-showing it every launch would be nagging, not helping.
-    set_setting("onboarding_seen_version", onboarding.ONBOARDING_VERSION)
+    # Record ONLY when the user walked to the end (accept). Closing mid-way
+    # (reject) must NOT mark onboarding seen — otherwise a half-finished run
+    # permanently skips the rescue flow the wizard exists to provide.
+    if int(result) == int(QDialog.DialogCode.Accepted):
+        set_setting("onboarding_seen_version", onboarding.ONBOARDING_VERSION)
 
 
 _LAUNCH_AGENT_LABEL = "so.saasfactory.sflow"
@@ -175,7 +179,7 @@ def _set_launch_at_login(enabled: bool):
             os.remove(_PLIST_PATH)
 
 
-def _setup_tray(app: QApplication, open_hub) -> QSystemTrayIcon:
+def _setup_tray(app: QApplication, open_hub, sflow=None) -> QSystemTrayIcon:
     pixmap = QPixmap(LOGO_PATH)
     if pixmap.isNull():
         icon = QIcon()
@@ -194,6 +198,41 @@ def _setup_tray(app: QApplication, open_hub) -> QSystemTrayIcon:
     hub_action = QAction(tr("tray.open_hub"), menu)
     hub_action.triggered.connect(open_hub)
     menu.addAction(hub_action)
+
+    if sflow is not None:
+        # Pause: flips a flag on the listener so every hotkey is ignored until
+        # resumed. The status line reflects it live.
+        pause_action = QAction(tr("tray.pause"), menu)
+        pause_action.setCheckable(True)
+
+        def _toggle_pause(checked):
+            try:
+                sflow.hotkey.set_paused(checked)
+            except Exception as e:
+                log_exc("pause toggle failed", e)
+            status.setText(tr("tray.status_paused") if checked else tr("tray.status"))
+        pause_action.toggled.connect(_toggle_pause)
+        menu.addAction(pause_action)
+
+        # Paste last transcript (same as the Cmd+Ctrl+V hotkey).
+        paste_action = QAction(tr("tray.paste_last"), menu)
+        paste_action.triggered.connect(sflow._on_paste_last)
+        menu.addAction(paste_action)
+
+        # Model submenu — a radio group over STT_MODELS, checking the active one.
+        model_menu = menu.addMenu(tr("tray.model"))
+        from config import STT_MODELS as _STT_MODELS
+        active_id = get_setting("stt_model", "whisper-turbo-local")
+        group = QActionGroup(model_menu)
+        group.setExclusive(True)
+        for m in _STT_MODELS:
+            act = QAction(m["label"], model_menu)
+            act.setCheckable(True)
+            act.setChecked(m["id"] == active_id)
+            act.triggered.connect(lambda _c, mid=m["id"]: set_setting("stt_model", mid))
+            group.addAction(act)
+            model_menu.addAction(act)
+
     menu.addSeparator()
 
     login_action = QAction(tr("tray.launch_login"), menu)
@@ -254,6 +293,7 @@ class SFlowApp(QObject):
         self._selected_text_snapshot = ""
         self._last_text: str = ""  # For "paste last transcript" hotkey
         self._tray: QSystemTrayIcon | None = None
+        self._toast = ToastManager()  # in-app, always-visible error surface
         self._last_notify_code = ""
         self._last_notify_ts = 0.0
 
@@ -327,8 +367,6 @@ class SFlowApp(QObject):
         never turn into a crash or a swallowed failure.
         """
         try:
-            if self._tray is None or not QSystemTrayIcon.supportsMessages():
-                return
             now = time.time()
             if not error_messages.should_notify(
                 toast.code, self._last_notify_code, self._last_notify_ts, now
@@ -336,10 +374,17 @@ class SFlowApp(QObject):
                 return
             self._last_notify_code = toast.code
             self._last_notify_ts = now
-            self._tray.showMessage(
-                toast.title, toast.body,
-                QSystemTrayIcon.MessageIcon.Warning, 4000,
-            )
+            # In-app toast FIRST — it's the guaranteed surface (macOS can swallow
+            # tray notifications). The tray message stays as a backup.
+            try:
+                self._toast.show(toast)
+            except Exception as e:
+                log_exc("in-app toast failed (suppressed)", e)
+            if self._tray is not None and QSystemTrayIcon.supportsMessages():
+                self._tray.showMessage(
+                    toast.title, toast.body,
+                    QSystemTrayIcon.MessageIcon.Warning, 4000,
+                )
         except Exception as e:
             log_exc("notify failed (suppressed)", e)
 
@@ -732,7 +777,7 @@ def main():
         sflow.hub.raise_()
         sflow.hub.activateWindow()
 
-    sflow.set_tray(_setup_tray(app, open_hub))
+    sflow.set_tray(_setup_tray(app, open_hub, sflow))
 
     # The DB may have quarantined a corrupt history at construction (before the
     # tray existed to toast it). Surface it now that the tray is up.

@@ -67,6 +67,20 @@ def test_force_reset_clears_recording_state(hk):
     assert "pressed" in hk._events
 
 
+def test_pause_makes_the_listener_deaf(hk):
+    """The menu-bar Pause flag: every event ignored until resumed."""
+    hk.set_paused(True)
+    assert hk.is_paused() is True
+    hk._on_press(K.ctrl_l)
+    hk._on_press(K.alt_l)
+    assert hk._events == []          # deaf while paused
+
+    hk.set_paused(False)
+    hk._on_press(K.ctrl_l)
+    hk._on_press(K.alt_l)
+    assert "pressed" in hk._events   # hears again after resume
+
+
 def test_command_mode_off_by_default(hk):
     # It uploads audio + the current selection to the cloud → must be opt-in.
     assert config.get_setting("command_mode_enabled") is False

@@ -321,6 +321,18 @@ class HistoryPage(QWidget):
         self.search.textChanged.connect(self._filter)
         row.addWidget(self.search)
 
+        # Filters: app / model / recency. Selecting one re-queries the DB.
+        self.filter_app = QComboBox()
+        self.filter_model = QComboBox()
+        self.filter_date = QComboBox()
+        self.filter_date.addItem(tr("filter.all_time"), None)
+        self.filter_date.addItem(tr("filter.today"), 1)
+        self.filter_date.addItem(tr("filter.7d"), 7)
+        self.filter_date.addItem(tr("filter.30d"), 30)
+        for cb in (self.filter_app, self.filter_model, self.filter_date):
+            cb.currentIndexChanged.connect(lambda _i: self.reload())
+            row.addWidget(cb)
+
         refresh = QPushButton()
         refresh.setObjectName("icon")
         refresh.setIcon(icons.icon("refresh", color=C.TEXT_DIM, size=16))
@@ -359,8 +371,31 @@ class HistoryPage(QWidget):
         self.setLayout(root)
         self.reload()
 
+    def _sync_filter_options(self):
+        """Repopulate the app/model dropdowns from what's in history, preserving
+        the current selection. Signals are blocked so this can't re-trigger reload."""
+        for cb, values, all_key in (
+            (self.filter_app, self.db.distinct_apps(), "filter.all_apps"),
+            (self.filter_model, self.db.distinct_models(), "filter.all_models"),
+        ):
+            prev = cb.currentData()
+            cb.blockSignals(True)
+            cb.clear()
+            cb.addItem(tr(all_key), None)
+            for v in values:
+                cb.addItem(v, v)
+            idx = cb.findData(prev)
+            cb.setCurrentIndex(idx if idx >= 0 else 0)
+            cb.blockSignals(False)
+
     def reload(self):
-        self._all_rows = self.db.get_recent(limit=500)
+        self._sync_filter_options()
+        self._all_rows = self.db.query(
+            app=self.filter_app.currentData(),
+            model=self.filter_model.currentData(),
+            since_days=self.filter_date.currentData(),
+            limit=500,
+        )
         self._filter(self.search.text())
 
     def _filter(self, query: str):
@@ -972,6 +1007,10 @@ class SettingsPage(QWidget):
         self._refresh_model_dl()
 
     def _save(self):
+        # Capture before we overwrite: a theme or language change needs a full
+        # page rebuild (inline-styled pages freeze C.*/tr() at construction).
+        _old_theme = get_setting("theme", "auto")
+        _old_lang = get_setting("language", "auto")
         # Honest gate: activating a local model whose weights aren't downloaded
         # surfaces CODE_MODEL_MISSING (download it), NEVER a key error — the key
         # has nothing to do with an on-device model.
@@ -1001,6 +1040,13 @@ class SettingsPage(QWidget):
         set_setting("liquid_glass_enabled", self.glass.isChecked())
         set_setting("theme", self.theme_combo.currentData())
         self._apply_theme_live()
+        # A theme or language change re-skins the whole Hub. Defer the rebuild so
+        # _save returns first (rebuild_pages deleteLater's this very page).
+        if (self.theme_combo.currentData() != _old_theme
+                or self.applang_combo.currentData() != _old_lang):
+            hub = self.window()
+            if hasattr(hub, "rebuild_pages"):
+                QTimer.singleShot(0, hub.rebuild_pages)
         mb = self.mouse.currentData()
         set_setting("mouse_button_hotkey", mb if mb else None)
         # API keys → Keychain (only when the user typed a new value)
@@ -1417,6 +1463,43 @@ class HubWindow(QWidget):
         self.btn_snip.clicked.connect(lambda: self._go(4))
         self.btn_trans.clicked.connect(lambda: self._go(5))
         self.btn_set.clicked.connect(lambda: self._go(6))
+
+    def rebuild_pages(self):
+        """Destroy and reconstruct every page.
+
+        A live theme or language change can't be applied in place: each page
+        freezes C.* colors and tr() strings at construction. Rebuilding is the
+        only faithful re-skin. The active page and the history search text are
+        preserved so the switch is invisible to the user.
+        """
+        idx = self.pages.currentIndex()
+        search = ""
+        try:
+            search = self.history_page.search.text()
+        except Exception:
+            pass
+
+        while self.pages.count():
+            w = self.pages.widget(0)
+            self.pages.removeWidget(w)
+            w.deleteLater()
+
+        self.home_page = HomePage(self.db)
+        self.insights_page = InsightsPage(self.db)
+        self.history_page = HistoryPage(self.db)
+        self.dict_page = DictionaryPage()
+        self.snippets_page = SnippetsPage()
+        self.transforms_page = TransformsPage()
+        self.settings_page = SettingsPage()
+        for p in (self.home_page, self.insights_page, self.history_page, self.dict_page,
+                  self.snippets_page, self.transforms_page, self.settings_page):
+            self.pages.addWidget(p)
+        self.pages.setCurrentIndex(idx)
+        try:
+            if search:
+                self.history_page.search.setText(search)
+        except Exception:
+            pass
 
     def _go(self, idx: int):
         self.pages.setCurrentIndex(idx)

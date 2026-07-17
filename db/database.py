@@ -168,6 +168,44 @@ class TranscriptionDB:
             ).fetchall()
             return [dict(row) for row in rows]
 
+    def distinct_apps(self) -> list[str]:
+        """App names present in history (for the history filter dropdown)."""
+        with closing(self._connect()) as conn, conn:
+            return [r[0] for r in conn.execute(
+                "SELECT DISTINCT app FROM transcriptions WHERE app IS NOT NULL AND app != '' ORDER BY app"
+            ).fetchall()]
+
+    def distinct_models(self) -> list[str]:
+        """Model ids present in history (for the history filter dropdown)."""
+        with closing(self._connect()) as conn, conn:
+            return [r[0] for r in conn.execute(
+                "SELECT DISTINCT model FROM transcriptions WHERE model IS NOT NULL AND model != '' ORDER BY model"
+            ).fetchall()]
+
+    def query(self, app: str = None, model: str = None, since_days: int = None,
+              limit: int = 50) -> list[dict]:
+        """History filtered by app / model / recency. ``since_days`` keeps rows
+        newer than N days (None = all time). Any subset of filters may be given."""
+        from datetime import datetime, timedelta, timezone
+        clauses, params = [], []
+        if app:
+            clauses.append("app = ?"); params.append(app)
+        if model:
+            clauses.append("model = ?"); params.append(model)
+        if since_days is not None:
+            # created_at is UTC (CURRENT_TIMESTAMP); match its format exactly.
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=since_days)).strftime("%Y-%m-%d %H:%M:%S")
+            clauses.append("created_at >= ?"); params.append(cutoff)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        params.append(limit)
+        with closing(self._connect()) as conn, conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                f"SELECT * FROM transcriptions{where} ORDER BY created_at DESC LIMIT ?",
+                params,
+            ).fetchall()
+            return [dict(r) for r in rows]
+
     def get(self, row_id: int) -> dict | None:
         with closing(self._connect()) as conn, conn:
             conn.row_factory = sqlite3.Row

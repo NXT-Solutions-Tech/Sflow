@@ -12,6 +12,9 @@ pyobjc-framework-Quartz>=10.0
 # today, but core/permissions.py imports it directly — pin it so a future pyobjc
 # reshuffle can't drop the edge and silently break the permission check.
 pyobjc-framework-ApplicationServices>=10.0
+# Microphone authorization status (AVCaptureDevice.authorizationStatusForMediaType_)
+# for permissions.snapshot() — the read-only query that never prompts.
+pyobjc-framework-AVFoundation>=10.0
 
 # --- Local offline transcription (Apple Silicon / Apple MLX) ---
 # Se BUNDLEAN en el .app (ver sflow.spec) para que los modelos locales funcionen

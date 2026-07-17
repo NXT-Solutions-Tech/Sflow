@@ -18,7 +18,24 @@ from config import (
     LOGO_SIZE,
     LOGO_PATH,
     get_setting,
+    set_setting,
 )
+
+
+def save_pill_pos(x: int, y: int):
+    """Remember where the user dragged the pill (setting `pill_pos`)."""
+    set_setting("pill_pos", [int(x), int(y)])
+
+
+def load_pill_pos():
+    """(x, y) the user last dragged the pill to, or None for the default anchor."""
+    p = get_setting("pill_pos", None)
+    if isinstance(p, (list, tuple)) and len(p) == 2:
+        try:
+            return int(p[0]), int(p[1])
+        except (TypeError, ValueError):
+            return None
+    return None
 
 
 class PillWidget(QWidget):
@@ -87,12 +104,21 @@ class PillWidget(QWidget):
 
     def _position_on_screen(self):
         screen = QApplication.primaryScreen()
-        if screen:
-            geo = screen.availableGeometry()
-            # Anchor left edge so expansion always goes right
-            x = geo.center().x() - PILL_WIDTH_IDLE // 2
-            y = geo.bottom() - 4 - PILL_HEIGHT
+        if not screen:
+            return
+        geo = screen.availableGeometry()
+        saved = load_pill_pos()
+        if saved is not None:
+            # Restore the user's dragged position, clamped onto the current screen
+            # so an unplugged external display can't strand the pill offscreen.
+            x = max(geo.left(), min(saved[0], geo.right() - PILL_WIDTH_IDLE))
+            y = max(geo.top(), min(saved[1], geo.bottom() - PILL_HEIGHT))
             self.move(x, y)
+            return
+        # Default: anchor left edge at bottom-center so expansion always goes right
+        x = geo.center().x() - PILL_WIDTH_IDLE // 2
+        y = geo.bottom() - 4 - PILL_HEIGHT
+        self.move(x, y)
 
     def _setup_native_macos(self):
         """Configure native macOS window to float above everything without stealing focus."""
@@ -321,9 +347,19 @@ class PillWidget(QWidget):
         icon_cx = 6 + LOGO_SIZE + 4 + (w - 6 - LOGO_SIZE - 4 - 4) // 2
         icon_cy = h // 2
 
-        if self._show_checkmark:
-            _tok = "warning" if self._cloud_fallback else "success"
-            pen = QPen(QColor(theme.tokens("dark")[_tok]), 2)
+        if self._show_checkmark and self._cloud_fallback:
+            # Distinct CLOUD glyph, not a tinted check: this dictation left the
+            # device (local engine unavailable → cloud). It's a privacy event and
+            # must read differently from a normal success at a glance.
+            c = QColor(theme.tokens("dark")["warning"])
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(c)
+            painter.drawEllipse(icon_cx - 6, icon_cy - 1, 6, 6)   # left puff
+            painter.drawEllipse(icon_cx - 2, icon_cy - 4, 7, 7)   # top puff
+            painter.drawEllipse(icon_cx + 1, icon_cy - 1, 6, 6)   # right puff
+            painter.drawRect(icon_cx - 6, icon_cy + 2, 13, 3)     # flat base
+        elif self._show_checkmark:
+            pen = QPen(QColor(theme.tokens("dark")["success"]), 2)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)
@@ -361,4 +397,7 @@ class PillWidget(QWidget):
             event.accept()
 
     def mouseReleaseEvent(self, event):
+        if self._drag_pos is not None:
+            # Persist where the user parked it, so it stays put across restarts.
+            save_pill_pos(self.x(), self.y())
         self._drag_pos = None

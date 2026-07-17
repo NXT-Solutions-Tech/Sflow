@@ -71,6 +71,27 @@ def input_monitoring_granted() -> bool | None:
         return None
 
 
+def mic_granted() -> bool | None:
+    """Microphone authorization, WITHOUT prompting.
+
+    ``authorizationStatusForMediaType_`` is the read-only query (unlike
+    ``requestAccess…`` which pops the system dialog), so it's safe at startup.
+    Status 3 = authorized → True; 2 restricted / 1 denied → False; 0
+    notDetermined → None (unknown, show the step). Any import/API failure → None,
+    never a hopeful True.
+    """
+    try:
+        from AVFoundation import AVCaptureDevice, AVMediaTypeAudio
+        status = AVCaptureDevice.authorizationStatusForMediaType_(AVMediaTypeAudio)
+        if status == 3:
+            return True
+        if status == 0:
+            return None
+        return False
+    except Exception:
+        return None
+
+
 def request_input_monitoring() -> bool:
     """Ask macOS for Input Monitoring. This is the only call that raises the
     system's own grant dialog; the preflight above never does. Returns whether
@@ -87,11 +108,12 @@ def snapshot() -> dict[str, bool | None]:
     """Current state of every permission. Never prompts — safe to call at
     startup to decide whether onboarding is needed.
 
-    The mic is deliberately absent: there is no preflight for it that doesn't
-    either prompt or pull in AVFoundation, and the wizard tests it for real by
-    opening a stream instead.
+    Includes the mic via ``mic_granted()`` (AVCaptureDevice's read-only status —
+    it never prompts). The wizard still opens a real stream to prove the device
+    produces signal, but a *denied* mic here reopens onboarding on its own.
     """
     return {
         PERM_ACCESSIBILITY: accessibility_granted(prompt=False),
         PERM_INPUT_MONITORING: input_monitoring_granted(),
+        PERM_MIC: mic_granted(),
     }

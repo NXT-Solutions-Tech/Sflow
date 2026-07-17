@@ -18,6 +18,10 @@ LANGUAGES = ("es", "en")
 CATALOG: dict[str, dict[str, str]] = {
     # ---- tray ----
     "tray.status": {"es": "SFlow — Activo", "en": "SFlow — Active"},
+    "tray.status_paused": {"es": "SFlow — Pausado", "en": "SFlow — Paused"},
+    "tray.pause": {"es": "Pausar SFlow", "en": "Pause SFlow"},
+    "tray.model": {"es": "Modelo", "en": "Model"},
+    "tray.paste_last": {"es": "Pegar último dictado", "en": "Paste last transcript"},
     "tray.open_hub": {"es": "Abrir Hub  (⌘⇧H)", "en": "Open Hub  (⌘⇧H)"},
     "tray.launch_login": {"es": "Iniciar con macOS", "en": "Launch at login"},
     "tray.relaunch": {"es": "Reiniciar SFlow", "en": "Restart SFlow"},
@@ -34,6 +38,12 @@ CATALOG: dict[str, dict[str, str]] = {
 
     # ---- page titles ----
     "page.history": {"es": "Historial", "en": "History"},
+    "filter.all_apps": {"es": "Todas las apps", "en": "All apps"},
+    "filter.all_models": {"es": "Todos los modelos", "en": "All models"},
+    "filter.all_time": {"es": "Todo el tiempo", "en": "All time"},
+    "filter.today": {"es": "Hoy", "en": "Today"},
+    "filter.7d": {"es": "Últimos 7 días", "en": "Last 7 days"},
+    "filter.30d": {"es": "Últimos 30 días", "en": "Last 30 days"},
     "page.dictionary": {"es": "Diccionario personal", "en": "Personal dictionary"},
     "page.snippets": {"es": "Snippets", "en": "Snippets"},
     "page.settings": {"es": "Ajustes", "en": "Settings"},

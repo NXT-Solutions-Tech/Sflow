@@ -70,6 +70,9 @@ class HotkeyListener(QObject):
         self._recording = False
         self._hands_free = False
         self._command_mode = False
+        # When paused, every key/mouse event is ignored (the menu-bar "Pausar
+        # SFlow" toggle). The listener keeps running; it just goes inert.
+        self._paused = False
         self._kb_listener: keyboard.Listener | None = None
         self._mouse_listener: mouse.Listener | None = None
 
@@ -107,6 +110,16 @@ class HotkeyListener(QObject):
             self._mouse_listener.stop()
             self._mouse_listener = None
 
+    def set_paused(self, paused: bool):
+        """Pause/resume the hotkeys. Paused = every event ignored; the listener
+        stays alive so resume is instant. Clears in-flight state on pause."""
+        self._paused = bool(paused)
+        if self._paused:
+            self.force_reset()
+
+    def is_paused(self) -> bool:
+        return self._paused
+
     def force_reset(self):
         """Clear all in-progress recording state without emitting anything.
 
@@ -121,6 +134,8 @@ class HotkeyListener(QObject):
 
     # --- Mouse ---
     def _on_click(self, x, y, button, pressed):
+        if self._paused:
+            return
         mb_name = get_setting("mouse_button_hotkey")
         target = _MOUSE_BUTTON_MAP.get(mb_name)
         if target is None or button != target:
@@ -141,6 +156,8 @@ class HotkeyListener(QObject):
             return ""
 
     def _on_press(self, key):
+        if self._paused:
+            return
         is_ctrl = key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r)
         is_alt = key in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r,
                          keyboard.Key.alt_gr)
@@ -243,6 +260,8 @@ class HotkeyListener(QObject):
             self.pressed.emit()
 
     def _on_release(self, key):
+        if self._paused:
+            return
         is_ctrl = key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r)
         is_alt = key in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r,
                          keyboard.Key.alt_gr)
