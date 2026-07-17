@@ -6,11 +6,24 @@ with a sliding knob — plus tiny helpers to tag buttons with their QSS role.
 """
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QAbstractButton, QPushButton
+from PyQt6.QtWidgets import QAbstractButton, QLabel, QPushButton
 from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtProperty, QSize
 from PyQt6.QtGui import QPainter, QColor, QFont
 
 from ui import theme
+
+
+# ---------- Type helpers ----------
+def page_title(text: str) -> QLabel:
+    """The header a Hub page opens with. Size/family/weight come from the
+    `role="page"` QSS rule; the negative tracking has to be set here because Qt
+    style sheets have no letter-spacing property."""
+    lb = QLabel(text)
+    lb.setProperty("role", "page")
+    f = lb.font()
+    f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, -0.5)
+    lb.setFont(f)
+    return lb
 
 
 # ---------- Button role helpers ----------

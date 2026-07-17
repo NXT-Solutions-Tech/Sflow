@@ -5,6 +5,7 @@ Command Mode / Cmd+Shift+H / Cmd+Ctrl+V hotkeys against regressions."""
 import pytest
 from pynput import keyboard
 
+import config
 from core.hotkey import HotkeyListener
 
 K = keyboard.Key
@@ -36,12 +37,35 @@ def test_ctrl_alt_hold_is_regular_recording(hk):
 
 
 def test_ctrl_shift_hold_is_command_mode(hk):
+    config.set_setting("command_mode_enabled", True)
     hk._on_press(K.ctrl_l)
     hk._on_press(K.shift_l)
     assert hk._events == ["command_pressed"]     # not "pressed"
     hk._on_release(K.shift_l)
     assert "command_released" in hk._events
     assert "pressed" not in hk._events            # never confused with regular
+
+
+def test_command_mode_off_by_default(hk):
+    # It uploads audio + the current selection to the cloud → must be opt-in.
+    assert config.get_setting("command_mode_enabled") is False
+    hk._on_press(K.ctrl_l)
+    hk._on_press(K.shift_l)
+    assert hk._events == []
+
+
+def test_command_mode_toggle_applies_without_restart(hk):
+    """The Hub writes the setting live; the listener must honour it on the very
+    next keypress — no relaunch. Guards the toggle that used to be inert."""
+    config.set_setting("command_mode_enabled", True)
+    hk._on_press(K.ctrl_l); hk._on_press(K.shift_l)
+    assert "command_pressed" in hk._events
+    hk._on_release(K.shift_l); hk._on_release(K.ctrl_l)
+
+    hk._events.clear()
+    config.set_setting("command_mode_enabled", False)
+    hk._on_press(K.ctrl_l); hk._on_press(K.shift_l)
+    assert hk._events == []
 
 
 def test_double_tap_ctrl_starts_hands_free(hk):

@@ -37,8 +37,16 @@ from core.transform import TransformHandler
 from core.relaunch import relaunch_app
 from core.logger import log, log_exc
 from db.database import TranscriptionDB
-from config import LOGO_PATH, APP_DATA_DIR, AUDIO_DIR, get_setting
+from config import LOGO_PATH, APP_DATA_DIR, AUDIO_DIR, get_setting, get_stt_model
 from ui import theme
+
+
+def _was_cloud_fallback(model_id: str) -> bool:
+    """True when the user picked a LOCAL engine but the router transcribed in the
+    cloud anyway (local engine unavailable or failed mid-run). The audio left the
+    device, so the pill must say so instead of flashing a plain success check."""
+    active = get_stt_model()
+    return bool(active.get("local")) and model_id != active.get("model")
 
 
 def apply_theme(app: QApplication) -> str:
@@ -429,7 +437,9 @@ class SFlowApp(QObject):
             )
         except Exception as e:
             log_exc("db.insert FAILED", e)
-        self.pill.set_state(PillWidget.STATE_DONE)
+        self.pill.set_state(
+            PillWidget.STATE_DONE_CLOUD if _was_cloud_fallback(model_id) else PillWidget.STATE_DONE
+        )
 
     @pyqtSlot()
     def _on_hub_requested(self):

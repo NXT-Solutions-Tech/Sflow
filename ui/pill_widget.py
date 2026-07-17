@@ -28,6 +28,10 @@ class PillWidget(QWidget):
     STATE_RECORDING = "recording"
     STATE_PROCESSING = "processing"
     STATE_DONE = "done"
+    # Same success path as DONE, but the audio left the device: the selected
+    # local engine failed and the router fell back to the cloud. Amber check,
+    # held longer, so "offline" never silently means "uploaded".
+    STATE_DONE_CLOUD = "done_cloud"
     STATE_ERROR = "error"
 
     def __init__(self):
@@ -49,6 +53,7 @@ class PillWidget(QWidget):
         self._show_checkmark = False
         self._show_spinner = False
         self._show_error = False
+        self._cloud_fallback = False
         self._spinner_angle = 0
         self._fade = None  # keep a ref to the running fade so it isn't GC'd
 
@@ -214,6 +219,7 @@ class PillWidget(QWidget):
         self._show_checkmark = False
         self._show_spinner = False
         self._show_error = False
+        self._cloud_fallback = False
         self._spinner_timer.stop()
 
         if state == self.STATE_IDLE:
@@ -236,6 +242,13 @@ class PillWidget(QWidget):
             self.visualizer.setVisible(False)
             self.visualizer.stop()
             self._done_timer.start(800)
+        elif state == self.STATE_DONE_CLOUD:
+            self._target_width = PILL_WIDTH_STATUS
+            self._show_checkmark = True
+            self._cloud_fallback = True
+            self.visualizer.setVisible(False)
+            self.visualizer.stop()
+            self._done_timer.start(1600)  # longer than DONE — the user should catch it
         elif state == self.STATE_ERROR:
             self._target_width = PILL_WIDTH_STATUS
             self._show_error = True
@@ -309,7 +322,8 @@ class PillWidget(QWidget):
         icon_cy = h // 2
 
         if self._show_checkmark:
-            pen = QPen(QColor(theme.tokens("dark")["success"]), 2)
+            _tok = "warning" if self._cloud_fallback else "success"
+            pen = QPen(QColor(theme.tokens("dark")[_tok]), 2)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)

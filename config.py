@@ -56,15 +56,15 @@ def _default_settings() -> dict:
         "liquid_glass_enabled": False,
         "streaming_paste_enabled": False,
         "mouse_button_hotkey": None,  # None | "middle" | "x1" | "x2"
-        "command_mode_enabled": True,
+        # Opt-in: Command Mode sends the audio AND the selected text to the cloud,
+        # so it stays off until the user turns it on (Hub -> Ajustes).
+        "command_mode_enabled": False,
         "paste_backend": "keystroke",  # "keystroke" | "clipboard"
         "save_audio_for_retry": True,
         "history_hotkey_enabled": True,
         "sound_on_start": False,
         "sound_on_done": False,
         "snippets_enabled": True,
-        "focus_mode_enabled": False,
-        "focus_mode_apps": [],
         "transform_prompts": [
             {"label": "Más conciso", "prompt": "Haz este texto más conciso preservando el significado clave."},
             {"label": "Más formal", "prompt": "Reescribe este texto en tono formal profesional."},

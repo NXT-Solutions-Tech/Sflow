@@ -197,7 +197,12 @@ class HotkeyListener(QObject):
             return
 
         # Command Mode: Ctrl+Shift hold (no Alt/Cmd). Distinct from Ctrl+Alt.
-        if self._ctrl_held and self._shift_held and not self._alt_held and not self._cmd_held:
+        # Opt-in: it uploads the audio AND the current selection to the cloud,
+        # so it stays off until the user asks for it.
+        if (
+            get_setting("command_mode_enabled", False)
+            and self._ctrl_held and self._shift_held and not self._alt_held and not self._cmd_held
+        ):
             self._recording = True
             self._command_mode = True
             self._hands_free = False

@@ -206,6 +206,9 @@ def qss(scheme: str) -> str:
     }}
 
     /* ---- display / body type via `role` property ---- */
+    /* `page` is the header every Hub page opens with: sans, so the serif keeps its
+       impact on the brand/display surfaces (`display`) it's reserved for. */
+    QLabel[role="page"]    {{ font-family: "{SANS}"; font-size: 28px; font-weight: 600; color: {t['text']}; }}
     QLabel[role="display"] {{ font-family: "{SERIF}"; font-size: 30px; color: {t['text']}; }}
     QLabel[role="title"]   {{ font-family: "{SERIF}"; font-size: 26px; color: {t['text']}; }}
     QLabel[role="heading"] {{ font-family: "{SANS}"; font-size: 15px; font-weight: 600; color: {t['text']}; }}

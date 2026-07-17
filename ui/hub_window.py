@@ -32,7 +32,7 @@ import subprocess
 # stylesheets become theme-aware for free.
 from ui.theme import C  # noqa: E402
 from ui import icons  # noqa: E402
-from ui.components import Switch, primary_button, secondary_button  # noqa: E402
+from ui.components import Switch, page_title, primary_button, secondary_button  # noqa: E402
 
 
 # ---------- Helpers ----------
@@ -297,8 +297,7 @@ class HistoryPage(QWidget):
         root.setContentsMargins(28, 22, 28, 22)
         root.setSpacing(14)
 
-        title = QLabel("Historial")
-        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
+        title = page_title("Historial")
         root.addWidget(title)
 
         sub = QLabel("Tus transcripciones recientes. Click en una para expandir, ⋮ para acciones.")
@@ -450,8 +449,7 @@ class DictionaryPage(QWidget):
         root.setContentsMargins(28, 22, 28, 22)
         root.setSpacing(12)
 
-        title = QLabel("Diccionario personal")
-        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
+        title = page_title("Diccionario personal")
         root.addWidget(title)
 
         sub = QLabel("Una palabra o frase por línea (pista de vocabulario para Whisper: nombres, jerga, términos técnicos).\nPara sustituciones automáticas de texto usa una flecha:  btw -> by the way")
@@ -510,8 +508,7 @@ class SnippetsPage(QWidget):
         root.setContentsMargins(28, 22, 28, 22)
         root.setSpacing(14)
 
-        title = QLabel("Snippets")
-        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
+        title = page_title("Snippets")
         root.addWidget(title)
 
         sub = QLabel(
@@ -654,8 +651,7 @@ class SettingsPage(QWidget):
         root.setContentsMargins(28, 22, 28, 22)
         root.setSpacing(16)
 
-        title = QLabel("Ajustes")
-        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
+        title = page_title("Ajustes")
         root.addWidget(title)
 
         tabs = QTabWidget()
@@ -817,12 +813,9 @@ class SettingsPage(QWidget):
         snd.addWidget(self.sound_done)
 
         bl = group("Comportamiento", sysl)
-        self.command_mode = Switch("Command Mode (Ctrl+Shift hold → transforma selección con voz)")
-        self.command_mode.setChecked(get_setting("command_mode_enabled", True))
+        self.command_mode = Switch("Command Mode (Ctrl+Shift hold → transforma selección con voz · envía audio y selección a la nube)")
+        self.command_mode.setChecked(get_setting("command_mode_enabled", False))
         bl.addWidget(self.command_mode)
-        self.focus_mode = Switch("Focus Mode (silencia apps distractoras al dictar)")
-        self.focus_mode.setChecked(get_setting("focus_mode_enabled", False))
-        bl.addWidget(self.focus_mode)
         self.save_audio = Switch("Guardar audio para re-transcribir (historial)")
         self.save_audio.setChecked(get_setting("save_audio_for_retry", True))
         bl.addWidget(self.save_audio)
@@ -879,11 +872,15 @@ class SettingsPage(QWidget):
         }[key_source(name)]
 
     def _restart_snapshot(self) -> tuple:
-        """Settings that only take effect after restart. If any change → offer relaunch."""
+        """Settings that only take effect after restart. If any change → offer relaunch.
+
+        `command_mode_enabled` is NOT here: the hotkey listener reads it live on
+        every keypress, so it applies the moment it's saved. Listing it would
+        promise a restart the setting doesn't need.
+        """
         return (
             get_setting("mouse_button_hotkey"),
             get_setting("liquid_glass_enabled", False),
-            get_setting("command_mode_enabled", True),
             get_setting("stt_model", "whisper-turbo-local"),
         )
 
@@ -927,7 +924,6 @@ class SettingsPage(QWidget):
         set_setting("sound_on_start", self.sound_start.isChecked())
         set_setting("sound_on_done", self.sound_done.isChecked())
         set_setting("command_mode_enabled", self.command_mode.isChecked())
-        set_setting("focus_mode_enabled", self.focus_mode.isChecked())
         set_setting("save_audio_for_retry", self.save_audio.isChecked())
         set_setting("liquid_glass_enabled", self.glass.isChecked())
         set_setting("theme", self.theme_combo.currentData())
@@ -968,8 +964,7 @@ class InsightsPage(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 22, 28, 16)
         outer.setSpacing(16)
-        title = QLabel("Insights")
-        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
+        title = page_title("Insights")
         outer.addWidget(title)
 
         self._scroll = QScrollArea()
@@ -1100,8 +1095,7 @@ class TransformsPage(QWidget):
         outer.setContentsMargins(28, 22, 28, 16)
         outer.setSpacing(12)
 
-        title = QLabel("Transforms")
-        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 30px;")
+        title = page_title("Transforms")
         outer.addWidget(title)
         sub = QLabel("Reescrituras con IA sobre el texto seleccionado. Selecciona texto y aplica con ⌥+1…8.")
         sub.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
@@ -1184,8 +1178,7 @@ class HomePage(QWidget):
 
         hour = datetime.now().hour
         greet = "Buenos días" if hour < 13 else ("Buenas tardes" if hour < 20 else "Buenas noches")
-        title = QLabel(greet)
-        title.setStyleSheet(f"color: {C.TEXT}; font-family: 'Instrument Serif'; font-size: 32px;")
+        title = page_title(greet)
         root.addWidget(title)
 
         shortcuts = QLabel(
