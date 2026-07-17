@@ -167,7 +167,9 @@ def test_empty_peaks_is_not_a_pass():
 
 
 # ---------- store_api_key ----------
-def test_store_api_key_writes_keychain_and_a_private_env(tmp_path, monkeypatch):
+def test_store_api_key_keeps_the_key_out_of_the_filesystem(tmp_path, monkeypatch):
+    """Keychain accepted → no cleartext copy. A .env written "as interop" would
+    outlive the Keychain entry and nothing ever deletes it."""
     calls = []
     monkeypatch.setattr("core.secrets.set_key", lambda n, v: calls.append((n, v)) or True)
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
@@ -176,14 +178,11 @@ def test_store_api_key_writes_keychain_and_a_private_env(tmp_path, monkeypatch):
     assert onboarding.store_api_key(key, str(tmp_path)) is True
 
     assert calls == [("GROQ_API_KEY", key)]
-    env = tmp_path / ".env"
-    assert env.read_text() == f"GROQ_API_KEY={key}\n"
-    # 0600: the default 0644 would expose the key to every user on the machine.
-    assert oct(env.stat().st_mode & 0o777) == "0o600"
+    assert not (tmp_path / ".env").exists()
     assert os.environ["GROQ_API_KEY"] == key
 
 
-def test_env_is_still_written_when_the_keychain_fails(tmp_path, monkeypatch):
+def test_env_is_the_fallback_when_the_keychain_fails(tmp_path, monkeypatch):
     """Keychain unavailable must not cost the user their key."""
     def boom(*_a):
         raise RuntimeError("no keyring backend")
@@ -192,4 +191,22 @@ def test_env_is_still_written_when_the_keychain_fails(tmp_path, monkeypatch):
     key = "gsk_" + "b" * 40
 
     assert onboarding.store_api_key(key, str(tmp_path)) is False
-    assert (tmp_path / ".env").read_text() == f"GROQ_API_KEY={key}\n"
+    env = tmp_path / ".env"
+    assert env.read_text() == f"GROQ_API_KEY={key}\n"
+    # 0600 from the first byte: the default 0644 would expose the key to every
+    # user on the machine, and a post-hoc chmod leaves that window open.
+    assert oct(env.stat().st_mode & 0o777) == "0o600"
+
+
+def test_env_fallback_is_private_even_if_a_world_readable_env_existed(tmp_path, monkeypatch):
+    """O_TRUNC on a pre-existing 0644 .env keeps its old mode — reuse must not
+    silently inherit a world-readable file."""
+    monkeypatch.setattr("core.secrets.set_key", lambda n, v: False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    env = tmp_path / ".env"
+    env.write_text("GROQ_API_KEY=old\n")
+    env.chmod(0o644)
+
+    onboarding.store_api_key("gsk_" + "c" * 40, str(tmp_path))
+
+    assert oct(env.stat().st_mode & 0o777) == "0o600"

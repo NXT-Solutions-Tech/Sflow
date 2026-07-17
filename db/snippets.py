@@ -1,8 +1,13 @@
 """Snippets store — voice triggers → text expansions.
 
-Example: trigger "my email" → expansion "danielcarreong00@gmail.com".
+Example: trigger "mi correo" → expansion is whatever email the user saves.
 After transcription, any trigger matching (case-insensitive, word-boundary)
 is replaced inline by its expansion.
+
+The table ships EMPTY on purpose — do not seed defaults. An expansion is pasted
+verbatim into whatever the user is writing, so a seeded value is either someone
+else's real data or a placeholder that gets pasted for real. The Hub's snippets
+page teaches the feature and renders its own empty state.
 """
 import sqlite3
 from contextlib import closing
@@ -26,15 +31,6 @@ class SnippetsDB:
                 )
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_snippets_trigger ON snippets(trigger)")
-            # Seed defaults on very first run (empty table)
-            cur = conn.execute("SELECT COUNT(*) FROM snippets").fetchone()
-            if cur[0] == 0:
-                defaults = [
-                    ("mi correo", "danielcarreong00@gmail.com"),
-                    ("mi firma", "Saludos,\nDaniel"),
-                    ("firma larga", "Saludos cordiales,\nDaniel Carreón\nSaaS Factory"),
-                ]
-                conn.executemany("INSERT INTO snippets (trigger, expansion) VALUES (?, ?)", defaults)
 
     def list_all(self) -> list[dict]:
         with closing(sqlite3.connect(self.db_path)) as conn, conn:

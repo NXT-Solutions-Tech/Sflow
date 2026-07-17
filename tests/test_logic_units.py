@@ -51,8 +51,12 @@ def test_diff_candidates_filters_noise():
 
 
 # ---- snippets_matcher ----
+def test_snippets_start_empty(tmp_path):
+    # Seeding would paste someone else's data (or a placeholder) into real writing.
+    assert SnippetsDB(str(tmp_path / "s.db")).list_all() == []
+
+
 def test_snippet_longest_trigger_wins(tmp_path, monkeypatch):
-    # Use triggers that don't collide with SnippetsDB's seeded defaults.
     db = SnippetsDB(str(tmp_path / "s.db"))
     db.add("codigo", "CORTO")
     db.add("codigo secreto", "LARGO")

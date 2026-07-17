@@ -15,13 +15,15 @@ from config import DICTIONARY_PATH
 _SEP_RE = re.compile(r"\s*(?:->|=>|→)\s*")
 
 
+# Seeded verbatim into every install, and every line here is fed to Whisper as a
+# vocabulary hint on every dictation — so it holds only terms this app itself
+# needs recognised. A person's name would bias each transcription towards a
+# stranger (the upstream author's was seeded here for a while).
 _DEFAULT_SEED = """# SFlow Personal Dictionary
 # One word, name, or phrase per line. Used as Whisper vocabulary hint.
 # For text substitutions use an arrow:  btw -> by the way
-# Example entries below — edit to taste.
+# Add your own names, jargon and acronyms below.
 
-Daniel Carreón
-SaaS Factory
 SFlow
 Groq
 Whisper

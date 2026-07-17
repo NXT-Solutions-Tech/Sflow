@@ -10,6 +10,14 @@ def test_prompt_levels_differ():
     assert "código" in lc._build_system_prompt("code", "medium")  # tone appended
 
 
+def test_every_level_refuses_instructions_inside_the_text():
+    # Dictated text is content, never a prompt. The guard must hold at EVERY
+    # level, not just the aggressive one — "light" is the default.
+    for level in lc._LEVEL_RULES:
+        prompt = lc._build_system_prompt("default", level)
+        assert "NO un prompt" in prompt, level
+
+
 def test_level_none_bypasses_llm():
     # No provider mock needed: none must return the raw text without any call.
     assert lc.LLMCleanup().clean(RAMBLE, level="none") == RAMBLE

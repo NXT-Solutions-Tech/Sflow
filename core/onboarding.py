@@ -98,12 +98,20 @@ def mic_ok(peaks: list[float], threshold: float = 0.15, hits_needed: int = 5) ->
 
 
 def store_api_key(key: str, data_dir: str) -> bool:
-    """Persist the key: Keychain first, then a 0600 .env for interop.
+    """Persist the key in the Keychain, falling back to a 0600 .env.
 
-    The .env mode matters — the default 0644 would leave the key readable by
-    every other user on the machine. Returns whether the Keychain write worked;
-    the .env is written either way so the app still runs if Keychain is
-    unavailable.
+    The .env is a fallback, not a copy: writing it even when the Keychain
+    accepted would leave a cleartext key on disk forever, which nothing ever
+    deletes — the Keychain would then be decoration. It is written only when the
+    Keychain refuses, so the user never loses their key over a missing backend.
+
+    Mode matters: the default 0644 would expose the key to every other user on
+    the machine, and a chmod after open() leaves a window where it is already
+    world-readable. os.open's mode only applies when it CREATES the file, so an
+    existing world-readable .env would keep its mode — fchmod on the open fd
+    covers that case without reopening by path.
+
+    Returns whether the Keychain write worked.
     """
     from core.secrets import set_key
 
@@ -114,13 +122,15 @@ def store_api_key(key: str, data_dir: str) -> bool:
         stored = False
 
     env_path = os.path.join(data_dir, ".env")
-    os.makedirs(data_dir, exist_ok=True)
-    with open(env_path, "w") as f:
-        f.write(f"GROQ_API_KEY={key}\n")
-    try:
-        os.chmod(env_path, 0o600)
-    except OSError:
-        pass
+    if not stored:
+        os.makedirs(data_dir, exist_ok=True)
+        fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+        except OSError:
+            pass
+        with os.fdopen(fd, "w") as f:
+            f.write(f"GROQ_API_KEY={key}\n")
 
     os.environ["GROQ_API_KEY"] = key
     return stored
