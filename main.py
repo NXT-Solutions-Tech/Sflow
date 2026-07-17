@@ -30,6 +30,7 @@ from core.transcriber import Transcriber
 from core.transcriber_groq import GroqTranscriber
 from core.hotkey import HotkeyListener
 from core.paste import paste_text, paste_last_transcript, save_frontmost_app
+from core.dictation_actions import extract_actions, perform_actions
 from core.command_mode import CommandModeHandler, copy_selection
 from core.transform import TransformHandler
 from core.relaunch import relaunch_app
@@ -41,6 +42,22 @@ from config import (
     LOGO_PATH, AUDIO_DIR, get_setting, set_setting, get_stt_model,
 )
 from ui import theme
+
+
+def _discard_audio(path: str | None):
+    """Unlink a retry-WAV whose dictation never reached the DB.
+
+    The WAV is written at hotkey-release, before we know the transcription will
+    land a row. Every path that ends without an insert MUST come through here or
+    the file stays on disk forever: prune_old_audio_paths only walks rows, so an
+    unreferenced WAV is invisible to it.
+    """
+    if not path:
+        return
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def _was_cloud_fallback(model_id: str) -> bool:
@@ -196,7 +213,11 @@ class SFlowApp(QObject):
     """Main controller. Wires hotkey -> recorder -> transcriber -> clipboard,
     plus Command Mode side-channel."""
 
-    transcription_done = pyqtSignal(str, float, str)  # text, duration, model_id
+    # audio_path travels WITH the result, not in an attribute: the worker runs off
+    # the main thread while the slot is queued, so two overlapping dictations used
+    # to cross wires — row A ending up pointing at B's WAV (and "Re-transcribir"
+    # then overwriting A's text with B's audio).
+    transcription_done = pyqtSignal(str, float, str, str)  # text, duration, model_id, audio_path
     transcription_error = pyqtSignal(str)
     command_done = pyqtSignal(str)
     command_error = pyqtSignal(str)
@@ -254,12 +275,20 @@ class SFlowApp(QObject):
     def _prune_old_audio(self):
         try:
             for p in self.db.prune_old_audio_paths(days=7):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
+                _discard_audio(p)
         except Exception as e:
             log_exc("audio prune failed", e)
+        # Second pass, by mtime: catches WAVs no row references (dictations that
+        # died before the insert). Runs after the row-driven prune so the ones it
+        # just un-referenced are already gone.
+        try:
+            orphans = self.db.prune_orphan_audio_files(AUDIO_DIR, days=7)
+            for p in orphans:
+                _discard_audio(p)
+            if orphans:
+                log(f"pruned {len(orphans)} orphan WAV(s)")
+        except Exception as e:
+            log_exc("orphan audio prune failed", e)
 
     def set_tray(self, tray: QSystemTrayIcon):
         """The tray icon is the delivery vehicle for error toasts. It's built
@@ -324,6 +353,9 @@ class SFlowApp(QObject):
 
     @pyqtSlot()
     def _on_hotkey_released(self):
+        # Bound outside the try: if anything below throws once the WAV is on disk,
+        # the handler still has to discard it or it outlives every reference.
+        audio_path = None
         try:
             duration = self.recorder.stop()
             self.pill.set_state(PillWidget.STATE_PROCESSING)
@@ -336,14 +368,13 @@ class SFlowApp(QObject):
             recording_duration = self.recorder.get_duration()
 
             # Persist WAV so the user can re-transcribe from the Hub later
-            audio_path = None
             if get_setting("save_audio_for_retry", True):
                 import uuid
                 audio_path = os.path.join(AUDIO_DIR, f"{uuid.uuid4().hex}.wav")
                 try:
                     self.recorder.save_wav_to(audio_path)
                 except Exception as e:
-                    print(f"audio save failed: {e}")
+                    log_exc("audio save failed", e)
                     audio_path = None
 
             threading.Thread(
@@ -351,7 +382,10 @@ class SFlowApp(QObject):
                 args=(wav_buffer, recording_duration, audio_path),
                 daemon=True,
             ).start()
+            # Handed off: the worker owns the file from here.
+            audio_path = None
         except Exception as e:
+            _discard_audio(audio_path)
             log_exc("hotkey_released crashed (suppressed)", e)
             try:
                 self.pill.set_state(PillWidget.STATE_ERROR)
@@ -366,46 +400,58 @@ class SFlowApp(QObject):
             # passwords, 2FA codes, private messages. Log length only.
             log(f"transcribe ok: model={model_id}, chars={len(text) if text else 0}")
             if text:
-                self._pending_audio_path = audio_path
-                self.transcription_done.emit(text, duration, model_id)
+                self.transcription_done.emit(text, duration, model_id, audio_path or "")
             else:
                 log("transcribe returned empty text", level="WARN")
+                _discard_audio(audio_path)
                 self.transcription_error.emit(error_messages.CODE_SILENCE)
         except Exception as e:
             # The raw exception stays in the log; the UI gets a code it can
             # turn into words the user can act on.
             log_exc("transcribe FAILED", e)
+            _discard_audio(audio_path)
             self.transcription_error.emit(error_messages.classify_exception(e))
 
-    @pyqtSlot(str, float, str)
-    def _on_transcription_done(self, text: str, duration: float, model_id: str):
+    @pyqtSlot(str, float, str, str)
+    def _on_transcription_done(self, text: str, duration: float, model_id: str,
+                               audio_path: str = ""):
         log(f"transcription_done: chars={len(text)}")
-        final_text = text
-        paste_ok = True
+        # A trailing "dale enter" is an instruction, not dictation: strip it
+        # before it reaches the app, the history or the clipboard.
+        final_text, actions = extract_actions(text)
         try:
-            paste_text(final_text)
-            log("paste ok")
+            # The clipboard path reports failure by returning False, not by
+            # raising — a bare call here would flash a check over a lost paste.
+            paste_ok = paste_text(final_text)
+            log("paste ok" if paste_ok else "paste failed")
         except Exception as e:
             paste_ok = False
             log_exc("paste FAILED", e)
         self._last_text = final_text
-        audio_path = getattr(self, "_pending_audio_path", None)
-        self._pending_audio_path = None
         # Insert even when the paste failed: history is the recovery path the
         # "no se pudo pegar" toast points the user at.
         try:
             self.db.insert(
                 text=final_text, duration_seconds=duration,
-                model=model_id, audio_path=audio_path,
+                model=model_id, audio_path=audio_path or None,
                 app=getattr(self, "_dictation_app", None),
             )
         except Exception as e:
             log_exc("db.insert FAILED", e)
+            # No row → nothing will ever reference this WAV again.
+            _discard_audio(audio_path)
         if not paste_ok:
             # A checkmark here would claim the text landed somewhere it didn't.
             self.pill.set_state(PillWidget.STATE_ERROR)
             self.notify(error_messages.message_for(error_messages.CODE_PASTE_FAILED))
             return
+        if actions:
+            # Only after a successful paste: pressing Enter on text that never
+            # landed would fire off an empty message.
+            try:
+                perform_actions(actions)
+            except Exception as e:
+                log_exc("dictation actions failed", e)
         self.pill.set_state(
             PillWidget.STATE_DONE_CLOUD if _was_cloud_fallback(model_id) else PillWidget.STATE_DONE
         )

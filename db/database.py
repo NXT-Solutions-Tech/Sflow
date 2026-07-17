@@ -1,4 +1,5 @@
 import sqlite3
+import time
 from contextlib import closing
 from datetime import date, timedelta
 from config import DB_PATH
@@ -123,13 +124,55 @@ class TranscriptionDB:
         with closing(sqlite3.connect(self.db_path)) as conn, conn:
             return conn.execute("SELECT COUNT(*) FROM transcriptions").fetchone()[0]
 
+    def referenced_audio_paths(self) -> set[str]:
+        """Every WAV a live row still points at — i.e. the ones "re-transcribir
+        desde el historial" needs on disk."""
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+            return {
+                r[0] for r in conn.execute(
+                    "SELECT audio_path FROM transcriptions WHERE audio_path IS NOT NULL"
+                ).fetchall() if r[0]
+            }
+
+    def prune_orphan_audio_files(self, audio_dir: str, days: int = 7) -> list[str]:
+        """Return WAVs in `audio_dir` older than `days` that NO row references.
+
+        Safety net for the orphans left behind before the write-after-insert fix
+        (and for any future path that drops a file without a row): the row-driven
+        prune can't see them because it only walks audio_path columns. The mtime
+        cutoff is what protects a dictation that is still in flight — its WAV was
+        written seconds ago, so it can never be `days` old.
+        """
+        import os
+        cutoff = time.time() - days * 86400
+        referenced = self.referenced_audio_paths()
+        orphans = []
+        try:
+            names = os.listdir(audio_dir)
+        except OSError:
+            return orphans
+        for name in names:
+            if not name.endswith(".wav"):
+                continue
+            path = os.path.join(audio_dir, name)
+            if path in referenced:
+                continue
+            try:
+                if os.path.getmtime(path) < cutoff:
+                    orphans.append(path)
+            except OSError:
+                continue
+        return orphans
+
     def prune_old_audio_paths(self, days: int = 7) -> list[str]:
         """Return paths of WAVs older than `days` so caller can unlink them. Clears audio_path in DB."""
         import os
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
         # Match SQLite's CURRENT_TIMESTAMP format ("YYYY-MM-DD HH:MM:SS", space
         # separator, no microseconds) so the string comparison is correct.
-        cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+        # It must stay UTC, like CURRENT_TIMESTAMP: a local-time cutoff would
+        # silently prune the wrong window by the UTC offset.
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
         with closing(sqlite3.connect(self.db_path)) as conn, conn:
             rows = conn.execute(
                 "SELECT id, audio_path FROM transcriptions WHERE audio_path IS NOT NULL AND created_at < ?",

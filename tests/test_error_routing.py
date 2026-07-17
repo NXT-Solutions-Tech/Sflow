@@ -40,7 +40,6 @@ class Stub:
         self.db = FakeDB()
         self.toasts = []
         self._last_text = ""
-        self._pending_audio_path = None
         self._dictation_app = None
 
     def notify(self, toast):
@@ -48,7 +47,7 @@ class Stub:
 
 
 def _done(stub, text="hola", model_id="mlx-community/whisper-large-v3-turbo"):
-    return main.SFlowApp._on_transcription_done(stub, text, 1.0, model_id)
+    return main.SFlowApp._on_transcription_done(stub, text, 1.0, model_id, "")
 
 
 @pytest.fixture
@@ -88,9 +87,22 @@ def test_transcript_is_still_saved_when_the_paste_fails(stub, monkeypatch):
     assert stub.db.rows[0]["text"] == "texto importante"
 
 
+def test_a_paste_that_returns_false_is_not_a_success(stub, monkeypatch):
+    """The clipboard path signals failure by RETURNING False (its osascript no
+    longer raises, it's caught and logged). Only watching for exceptions here
+    brings the green-check-over-a-lost-paste bug straight back."""
+    monkeypatch.setattr(main, "paste_text", lambda _t: False)
+    monkeypatch.setattr(main, "_was_cloud_fallback", lambda _m: False)
+
+    _done(stub)
+
+    assert stub.pill.states == [main.PillWidget.STATE_ERROR]
+    assert [t.code for t in stub.toasts] == [em.CODE_PASTE_FAILED]
+
+
 # ---------- happy paths still work ----------
 def test_successful_paste_still_shows_done(stub, monkeypatch):
-    monkeypatch.setattr(main, "paste_text", lambda _t: None)
+    monkeypatch.setattr(main, "paste_text", lambda _t: True)
     monkeypatch.setattr(main, "_was_cloud_fallback", lambda _m: False)
 
     _done(stub)
@@ -101,7 +113,7 @@ def test_successful_paste_still_shows_done(stub, monkeypatch):
 
 def test_cloud_fallback_state_survives_the_paste_check(stub, monkeypatch):
     """The amber cloud-fallback check must not be flattened back to DONE."""
-    monkeypatch.setattr(main, "paste_text", lambda _t: None)
+    monkeypatch.setattr(main, "paste_text", lambda _t: True)
     monkeypatch.setattr(main, "_was_cloud_fallback", lambda _m: True)
 
     _done(stub)
