@@ -18,10 +18,7 @@ import multiprocessing
 # ABRE OTRA VENTANA (pill). freeze_support() intercepta al worker y lo hace
 # salir antes de llegar a main(). Debe ser lo PRIMERO que corre.
 multiprocessing.freeze_support()
-from PyQt6.QtWidgets import (
-    QApplication, QSystemTrayIcon, QMenu,
-    QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox,
-)
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PyQt6.QtCore import Qt, QObject, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QIcon, QPixmap, QAction
 
@@ -37,9 +34,12 @@ from core.command_mode import CommandModeHandler, copy_selection
 from core.transform import TransformHandler
 from core.relaunch import relaunch_app
 from core.logger import log, log_exc
-from core import error_messages, permissions
+from core import error_messages, onboarding, permissions
+from core.secrets import get_key
 from db.database import TranscriptionDB
-from config import LOGO_PATH, APP_DATA_DIR, AUDIO_DIR, get_setting, get_stt_model
+from config import (
+    LOGO_PATH, AUDIO_DIR, get_setting, set_setting, get_stt_model,
+)
 from ui import theme
 
 
@@ -61,127 +61,50 @@ def apply_theme(app: QApplication) -> str:
     return scheme
 
 
-def _ensure_accessibility() -> bool:
-    """Check Accessibility permission. Triggers macOS prompt on first call.
+def _run_onboarding_if_needed():
+    """Show the guided wizard on first run, or when a permission has been
+    revoked since.
 
-    After every .app rebuild the ad-hoc code signature changes, so macOS
-    silently revokes Accessibility — keystroke paste then fails without an
-    error. We detect that and open the Privacy panel so the user can re-add
-    SFlow without hunting through System Settings.
+    Replaces the old reactive _ensure_accessibility(), which only ever noticed
+    Accessibility (never Input Monitoring, the one pynput needs), asked for the
+    API key the default setup doesn't need, and — worst — returned True when its
+    import failed, so a broken probe was indistinguishable from a granted
+    permission.
+
+    The revocation path matters on macOS: an ad-hoc rebuild changes the binary
+    hash and TCC silently drops Accessibility, so the next dictation pastes
+    nothing. plan_steps() narrows that to just the broken step.
     """
-    trusted = True
-    try:
-        from ApplicationServices import AXIsProcessTrustedWithOptions
-        trusted = bool(AXIsProcessTrustedWithOptions({"AXTrustedCheckOptionPrompt": True}))
-    except Exception:
-        return True
+    perms = permissions.snapshot()
+    seen = get_setting("onboarding_seen_version", 0)
+    if not onboarding.needs_onboarding(seen, perms):
+        return
+    if not onboarding.should_prompt_again(time.time(), get_setting("onboarding_snooze_until", 0)):
+        return
 
-    if not trusted:
-        try:
-            subprocess.Popen([
-                "open",
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-            ])
-        except Exception:
-            pass
-        try:
-            QMessageBox.warning(
-                None,
-                "SFlow necesita Accessibility",
-                "Después de un rebuild macOS revoca el permiso. Abre System Settings → "
-                "Privacy & Security → Accessibility y vuelve a marcar SFlow. "
-                "Luego reinicia la app desde el menu del tray.",
-            )
-        except Exception:
-            pass
-    return trusted
+    key_required = onboarding.api_key_required(
+        bool(get_stt_model().get("local")),
+        get_setting("auto_cleanup_level", "none"),
+    )
+    # Keychain-first: os.getenv alone would re-prompt users who stored their key
+    # there, which is where the app itself puts it.
+    key_present = bool(get_key("GROQ_API_KEY"))
+
+    steps = onboarding.plan_steps(perms, key_required, key_present)
+    try:
+        from ui.onboarding_wizard import OnboardingWizard
+        OnboardingWizard(steps, key_required=key_required).exec()
+    except Exception as e:
+        # Onboarding is a helper, never a gate: if it breaks, the app still runs.
+        log_exc("onboarding wizard failed (suppressed)", e)
+        return
+    # Written even when steps were skipped — the user has seen the flow, and
+    # re-showing it every launch would be nagging, not helping.
+    set_setting("onboarding_seen_version", onboarding.ONBOARDING_VERSION)
 
 
 _LAUNCH_AGENT_LABEL = "so.saasfactory.sflow"
 _PLIST_PATH = os.path.expanduser(f"~/Library/LaunchAgents/{_LAUNCH_AGENT_LABEL}.plist")
-
-
-class FirstRunDialog(QDialog):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("SFlow")
-        self.setFixedWidth(460)
-
-        from ui import theme
-        accent = theme.tokens(theme.active_scheme())["accent"]
-        dim = theme.tokens(theme.active_scheme())["text_secondary"]
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(36, 32, 36, 32)
-        layout.setSpacing(14)
-
-        # Brand mark
-        logo = QLabel()
-        pm = QPixmap(LOGO_PATH)
-        if not pm.isNull():
-            logo.setPixmap(pm.scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio,
-                                     Qt.TransformationMode.SmoothTransformation))
-        layout.addWidget(logo)
-
-        title = QLabel("Te damos la bienvenida a SFlow")
-        title.setStyleSheet(f"font-family: 'Instrument Serif'; font-size: 30px;")
-        layout.addWidget(title)
-
-        sub = QLabel("Dictado por voz, privado y veloz. Para empezar, pega tu Groq API "
-                     "key — se usa para la transcripción en la nube (los modelos locales "
-                     "no la necesitan).")
-        sub.setWordWrap(True)
-        sub.setStyleSheet(f"color: {dim}; font-size: 13px;")
-        layout.addWidget(sub)
-
-        link = QLabel('<a style="color:%s; text-decoration:none;" '
-                      'href="https://console.groq.com/keys">Obtener una gratis en '
-                      'console.groq.com/keys →</a>' % accent)
-        link.setOpenExternalLinks(True)
-        link.setStyleSheet("font-size: 13px;")
-        layout.addWidget(link)
-        layout.addSpacing(4)
-
-        self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText("gsk_...")
-        self.key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.key_input.returnPressed.connect(self._save_key)
-        layout.addWidget(self.key_input)
-
-        save_btn = QPushButton("Guardar y continuar")
-        save_btn.setObjectName("primary")
-        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        save_btn.setMinimumHeight(38)
-        save_btn.clicked.connect(self._save_key)
-        layout.addWidget(save_btn)
-
-        self.setLayout(layout)
-
-    def _save_key(self):
-        key = self.key_input.text().strip()
-        if not key.startswith("gsk_") or len(key) < 20:
-            QMessageBox.warning(self, "Error", "La clave debe comenzar con 'gsk_' y tener al menos 20 caracteres.")
-            return
-
-        # Primary store: macOS Keychain (matches how the Hub saves keys).
-        try:
-            from core.secrets import set_key
-            set_key("GROQ_API_KEY", key)
-        except Exception:
-            pass
-        # Fallback/interop: also write .env, but 0600 (owner-only) not the
-        # default world-readable 0644, so the key isn't readable by other users.
-        env_path = os.path.join(APP_DATA_DIR, ".env")
-        os.makedirs(APP_DATA_DIR, exist_ok=True)
-        with open(env_path, "w") as f:
-            f.write(f"GROQ_API_KEY={key}\n")
-        try:
-            os.chmod(env_path, 0o600)
-        except OSError:
-            pass
-
-        os.environ["GROQ_API_KEY"] = key
-        self.accept()
 
 
 def _is_launch_at_login() -> bool:
@@ -688,19 +611,16 @@ def main():
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    api_key = os.getenv("GROQ_API_KEY", "")
-    if not api_key:
-        dialog = FirstRunDialog()
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            sys.exit(0)
+    # Runs before the Accessory activation policy below, so the wizard can take
+    # focus. It never exits: the app used to refuse to start without a Groq key
+    # it doesn't need — the default engine transcribes on this Mac.
+    _run_onboarding_if_needed()
 
     try:
         import AppKit
         AppKit.NSApp.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
     except Exception:
         pass
-
-    _ensure_accessibility()
 
     sflow = SFlowApp()
     sflow.start()

@@ -35,6 +35,12 @@ def _default_settings() -> dict:
         # Apariencia visual. "auto" sigue el modo claro/oscuro del sistema macOS;
         # "light" | "dark" fuerzan un tema. Ver ui/theme.py.
         "theme": "auto",
+        # Onboarding wizard: version last completed (0 = never). Bumping
+        # ONBOARDING_VERSION in core/onboarding.py re-runs it. `snooze_until` is
+        # a unix ts that suppresses the re-prompt after a revoked permission, so
+        # a user who chose "Ahora no" isn't nagged on every launch.
+        "onboarding_seen_version": 0,
+        "onboarding_snooze_until": 0,
         # Modelo de transcripcion activo. Ver STT_MODELS (abajo) para el catalogo.
         # Default: Whisper Turbo LOCAL (mejor precision es + offline, gana a Groq en
         # latencia y privacidad segun benchmark M4 12-jul-2026). Fallback a groq si
