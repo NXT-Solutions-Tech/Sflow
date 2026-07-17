@@ -196,3 +196,53 @@ def test_walking_off_the_last_step_accepts(qapp):
     wiz = ow.OnboardingWizard([STEP_WELCOME])
     wiz._advance()
     assert wiz.result() == ow.QDialog.DialogCode.Accepted
+
+
+# ---------- on_enter fires exactly once per visit (segfault regression) ----------
+def test_on_enter_fires_once_per_step_visit(qapp, monkeypatch):
+    """A repeat showEvent or advancing must enter a step exactly once. Entering
+    the mic step twice reassigned self._recorder while the first PortAudio stream
+    was still live → the C audio thread fired into a GC'd CFFI closure and the
+    process segfaulted (EXC_BAD_ACCESS on the CoreAudio IO thread)."""
+    wiz = ow.OnboardingWizard([STEP_WELCOME, STEP_MIC])
+    counts = {s.step_id: 0 for s in wiz._steps}
+    for st in wiz._steps:
+        st.on_enter = (lambda sid: (lambda: counts.__setitem__(sid, counts[sid] + 1)))(st.step_id)
+        st.on_leave = lambda: None
+    monkeypatch.setattr(wiz, "isVisible", lambda: True)
+
+    # macOS can fire showEvent several times during window setup.
+    wiz._enter_current()
+    wiz._enter_current()
+    wiz._enter_current()
+    assert counts[STEP_WELCOME] == 1
+    assert counts[STEP_MIC] == 0
+
+    # Advancing enters the next step once — never twice (the _advance bug).
+    wiz._advance()
+    assert counts[STEP_MIC] == 1
+    wiz._enter_current()  # a stray repeat showEvent after advancing
+    assert counts[STEP_MIC] == 1
+
+
+def test_mic_on_enter_releases_a_prior_stream_before_reopening(qapp, monkeypatch):
+    """Belt and braces: even if on_enter runs twice, the previous recorder is
+    stopped before a new one opens, so no orphaned live stream is ever left for
+    GC to free mid-callback."""
+    events = []
+
+    class Fake:
+        audio_queue = None
+
+        def start(self):
+            events.append("start")
+
+        def stop(self):
+            events.append("stop")
+            return 0.0
+
+    monkeypatch.setattr("core.recorder.AudioRecorder", lambda: Fake())
+    step = ow.MicStep()
+    step.on_enter()
+    step.on_enter()  # re-entry must release #1 before starting #2
+    assert events == ["start", "stop", "start"]

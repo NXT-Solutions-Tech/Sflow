@@ -170,6 +170,13 @@ class MicStep(WizardStep):
         self._timer.timeout.connect(self._sample)
 
     def on_enter(self):
+        # Re-entrant safe: release any recorder still open before starting a new
+        # one. Reassigning self._recorder without this would drop the previous
+        # AudioRecorder while its PortAudio callback is still live — the C audio
+        # thread then fires into a GC'd CFFI closure and the process segfaults.
+        self._timer.stop()
+        self.viz.stop()
+        self._release()
         self.status.set_pending("Escuchando…")
         try:
             from core.recorder import AudioRecorder
@@ -469,6 +476,11 @@ class OnboardingWizard(QDialog):
 
         self._steps: list[WizardStep] = [self._build(s, key_required) for s in steps]
         self._index = 0
+        # Which step index has already had on_enter() fired. showEvent can fire
+        # repeatedly during macOS window setup, and _advance used to call
+        # on_enter twice; entering the mic step twice orphaned a live PortAudio
+        # stream (GC'd mid-callback → EXC_BAD_ACCESS). Guard: enter once per visit.
+        self._entered_index = -1
 
         root = QVBoxLayout(self)
         root.setContentsMargins(36, 30, 36, 26)
@@ -520,10 +532,19 @@ class OnboardingWizard(QDialog):
         for n, st in enumerate(self._steps):
             st.setVisible(n == i)
         self._index = i
+        self._entered_index = -1  # a fresh step has not been entered yet
         self._dots.set_index(i)
         self._sync_footer()
         if self.isVisible():
-            self.current.on_enter()
+            self._enter_current()
+
+    def _enter_current(self):
+        """Fire the current step's on_enter exactly once per visit. showEvent
+        can fire more than once; entering twice is what crashed the mic step."""
+        if self._entered_index == self._index:
+            return
+        self._entered_index = self._index
+        self.current.on_enter()
 
     def _sync_footer(self):
         label = self.current.skip_label()
@@ -539,17 +560,18 @@ class OnboardingWizard(QDialog):
 
     def _advance(self):
         self.current.on_leave()
+        self._entered_index = -1  # left the step; allow the next one to enter
         if self._index >= len(self._steps) - 1:
             self.accept()
             return
-        self._show_step(self._index + 1)
-        self.current.on_enter()
+        self._show_step(self._index + 1)  # enters the new step exactly once
 
     def showEvent(self, event):  # noqa: N802 - Qt
         super().showEvent(event)
         # First step's side effects wait for a real show, so an unshown grab
-        # (preview harness) never opens a mic stream or prompts for TCC.
-        self.current.on_enter()
+        # (preview harness) never opens a mic stream or prompts for TCC. Guarded
+        # so a repeat showEvent can't re-open (and orphan) the mic stream.
+        self._enter_current()
 
     def closeEvent(self, event):  # noqa: N802 - Qt
         for st in self._steps:
