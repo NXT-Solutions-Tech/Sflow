@@ -115,7 +115,7 @@ sflow/
 │   ├── theme.py                 # Design system: tokens + central QSS (light+dark)
 │   ├── components.py            # page_title, Switch, primary/secondary/ghost_button
 │   ├── onboarding_wizard.py     # First-run: mic + Accessibility + Input Monitoring + key
-│   └── settings_dialog.py       # QDialog for all toggles
+│   └── hub_window.py            # Hub: historial + diccionario + SettingsPage (todos los toggles)
 ├── core/
 │   ├── recorder.py              # sounddevice capture
 │   ├── transcriber.py           # Router (backend → commands → LLM cleanup)
@@ -130,9 +130,9 @@ sflow/
 │   ├── permissions.py           # TCC probes (AX / CGPreflightListenEvent) — None = unknown
 │   ├── onboarding.py            # Which steps to show; api_key_required(); mic_ok()
 │   ├── error_messages.py        # Exception → code → actionable Spanish toast
-│   └── clipboard.py             # Focus save/restore + streaming paste
+│   ├── dictation_actions.py     # Trailing "press enter" → strip + press Return
+│   └── paste.py                 # Focus save/restore + CGEvent paste (clipboard fallback)
 ├── db/database.py               # SQLite history (model column tracks backend used)
-├── web/server.py                # Flask dashboard localhost:5678
 └── ~/Library/Application Support/SFlow/
     ├── .env                     # GROQ_API_KEY
     ├── settings.json            # User toggles (generated on save)
@@ -146,7 +146,7 @@ sflow/
 |---|---|
 | Ctrl+Alt hold | Regular recording |
 | Double-tap Ctrl, tap again to stop | Hands-free |
-| Ctrl+Shift hold | **Command Mode** — transforms selected text via LLM |
+| Ctrl+Shift hold | **Command Mode** — transforms selected text via LLM (**opt-in**: `command_mode_enabled`, default off) |
 | Mouse button (middle/Mouse4/Mouse5) | Regular recording (opt-in, Settings) |
 | Cmd+Shift+H | Open Hub (history + dictionary + settings) |
 | Cmd+Ctrl+V | Paste Last Transcript (Wispr Flow convention) |
@@ -171,10 +171,18 @@ Hotkey Release
       → tone = context.tone_for_active_app()
       → final = llm_cleanup.clean(raw, tone)         (Llama 3.1 8B instant, ~150ms)
       → (final, model_id)
-  → [QueuedConnection] → paste_text() + db.insert(model=model_id) + DONE
+  → [QueuedConnection] → paste_text() + db.insert(model=model_id)
+      → DONE (check verde) — or STATE_DONE_CLOUD (check ámbar, 1600ms) when
+        _was_cloud_fallback(model_id): the user picked a LOCAL engine but the
+        router transcribed in the cloud. The audio left the device, so the
+        fallback is never silent.
+      → paste raises → ERROR + toast (never a green check on a failed paste)
 ```
 
-### Command Mode
+### Command Mode (opt-in — `command_mode_enabled`, default False)
+`core/hotkey.py` reads the setting at press time, so toggling it takes effect
+immediately — no restart. It stays off by default because it uploads the audio
+**and the current selection** to the cloud.
 ```
 Ctrl+Shift Press
   → save_frontmost_app() + copy_selection() (Cmd+C → clipboard diff)
@@ -211,12 +219,34 @@ ns_window.setCollectionBehavior_(
 ```
 This is the same approach used by Spotlight and Wispr Flow itself.
 
-### 3. Auto-Paste (MUST use native AppleScript, not pyautogui)
-pyautogui is unreliable on macOS when modifier keys were recently released. Use:
-- `save_frontmost_app()` before recording (via AppleScript)
-- `pbcopy` to copy text to clipboard
-- AppleScript to restore focus to saved app
-- AppleScript `keystroke "v" using command down` to paste
+### 3. Auto-Paste (`core/paste.py` — CGEvent by default, clipboard as fallback)
+**Never pyautogui**: it is unreliable on macOS when modifier keys were recently
+released (and every hotkey here ends with a modifier release).
+
+Two backends, chosen by the `paste_backend` setting (Hub → Ajustes):
+
+1. **`"keystroke"` (DEFAULT)** — `_type_via_cgevent()` synthesizes Unicode keyboard
+   events via `CGEventKeyboardSetUnicodeString` + `CGEventPost`, in 20-char chunks
+   (larger events get dropped by some apps). The clipboard is **never touched**.
+2. **`"clipboard"` (FALLBACK)** — `_paste_via_clipboard()`: NSPasteboard write →
+   Cmd+V via AppleScript → restore the user's clipboard 0.5s later. Also used
+   automatically when CGEvent is unavailable (`_type_via_cgevent` returns False).
+
+**Focus: the keystroke path deliberately does NOT restore it.** SFlow runs as an
+accessory app and the pill is a NonactivatingPanel, so the target app is *already*
+frontmost — activating it was a redundant app-switch (the flash), and if the user
+switched windows during the ~950ms transcription it yanked the focus back and typed
+into the old app. Only `_paste_via_clipboard()` calls `_restore_focus()`, because
+its Cmd+V goes through System Events and needs the app active.
+
+**Why keystroke is the default:**
+- It doesn't clobber the user's clipboard (the fallback's restore leaves a ~0.5s
+  window where another listener could read the transcript).
+- **The transcript is never interpolated into AppleScript.** Only the frontmost
+  *app name* ever reaches `osascript`, and it goes through `_as_literal()`.
+  Dictated text — arbitrary, user-spoken, possibly `" & do shell script "…` —
+  cannot reach an AppleScript literal by construction. That's an injection vector
+  eliminated by design, not by escaping.
 
 ### 4. Audio Pipeline (thread-safe)
 sounddevice callback runs in audio thread — NEVER touch Qt widgets from it. Use `queue.Queue` as bridge:
@@ -232,8 +262,8 @@ Recordings under 0.3 seconds are accidental taps — skip transcription and retu
 - **Bundle mode**: read-only assets (logo) come from `sys._MEIPASS`, writable data (DB, .env) goes to `~/Library/Application Support/SFlow/`
 
 ### 7. Desktop App Features (main.py)
-- **System Tray**: QSystemTrayIcon in menu bar with dashboard link, "Start with macOS" toggle, quit.
-  Also the delivery vehicle for error toasts (`SFlowApp.notify`).
+- **System Tray**: QSystemTrayIcon in menu bar — "Abrir Hub (⌘⇧H)", "Iniciar con macOS" toggle,
+  "Reiniciar SFlow", quit. Also the delivery vehicle for error toasts (`SFlowApp.notify`).
 - **Onboarding wizard** (`ui/onboarding_wizard.py`): runs from `_run_onboarding_if_needed()`.
   Steps are planned by `core/onboarding.plan_steps()` — granted permissions are skipped, and
   the API key step only appears when `api_key_required()` says so. Replaced the old
@@ -242,16 +272,13 @@ Recordings under 0.3 seconds are accidental taps — skip transcription and retu
 - **Hide from Dock**: `NSApplicationActivationPolicyAccessory` via PyObjC (MUST be set AFTER
   the onboarding wizard — it needs focus to be usable)
 
-### 8. Port Selection (web/server.py)
-Default port is 5678 (not 5000 which conflicts with AirPlay on macOS 12+). Auto-scans for free port.
-
-### 9. Building the .app (IMPORTANT)
+### 8. Building the .app (IMPORTANT)
 - Use `ditto` (not `cp -r`) to copy .app to /Applications — `cp -r` corrupts bundle metadata causing segfaults
 - The .icns is auto-generated from logo.png by build.sh if missing
 - Ad-hoc signing (`codesign --force --deep --sign -`) is sufficient for personal use
 - Remove quarantine after install: `xattr -cr /Applications/SFlow.app`
 
-### 10. Critical: ad-hoc rebuild → silent Accessibility revocation
+### 9. Critical: ad-hoc rebuild → silent Accessibility revocation
 
 **Symptom:** After `ditto` of a rebuilt bundle, dictation works (transcription
 saves to DB, log shows `paste ok`) but the text never appears in the target
@@ -299,7 +326,8 @@ failed, so a broken probe looked exactly like a granted permission. The probes i
 
 ### Hotkeys
 Edit `core/hotkey.py`:
-- **Hold mode**: Currently Ctrl+Shift. Change `is_ctrl`/`is_shift` checks.
+- **Hold mode (push-to-talk)**: Currently Ctrl+Alt. Change the `_ctrl_held`/`_alt_held` checks
+  in `_on_press`. (Ctrl+**Shift** is Command Mode — a different branch in the same method.)
 - **Hands-free mode**: Currently double-tap Ctrl within 400ms. Change `DOUBLE_TAP_INTERVAL` in config.py.
 
 ### UI Dimensions
@@ -333,10 +361,10 @@ The PRP contains all the architectural decisions, gotchas, and anti-patterns dis
 | Paste doesn't work | Grant Accessibility permission to terminal; check `save_frontmost_app` |
 | Ctrl+C doesn't kill the process | This is handled by `signal.signal(signal.SIGINT, signal.SIG_DFL)` in main.py |
 | Short taps trigger transcription | Adjust the 0.3s threshold in `main.py` `_on_hotkey_released` |
-| Web dashboard not loading | Port auto-selects from 5678. Check: `lsof -i :5678` |
 | .app crashes on launch (segfault) | Was copied with `cp -r` instead of `ditto`. Reinstall with `ditto` |
 | .app blocked by macOS | Run `xattr -cr /Applications/SFlow.app` to remove quarantine |
-| First-run dialog invisible | Bug if NSApplicationActivationPolicyAccessory is set before dialog. Already fixed |
+| Onboarding wizard invisible | Bug if NSApplicationActivationPolicyAccessory is set before the wizard. Already fixed |
+| Hotkey does nothing at all | Input Monitoring revoked — pynput goes deaf without raising. The wizard's step re-grants it |
 | Transcription hangs forever | API timeout is 10s. Check your GROQ_API_KEY is valid |
 
 ## Auto-Blindaje log — full audit (2026-07-15)
@@ -350,9 +378,9 @@ The PRP contains all the architectural decisions, gotchas, and anti-patterns dis
   `sflow.log` — dictations can hold passwords/2FA). Log length only. `sflow.log` now
   rotates at ~1 MB (was unbounded).
 - **AppleScript injection:** the frontmost-app name is interpolated into `osascript`
-  (`paste.py`, `clipboard.py`). A maliciously-named `.app` could inject AppleScript →
-  now escaped/stripped via `_as_literal`.
-- **Secrets:** `FirstRunDialog` now writes the key to the **Keychain** (primary) and the
+  (`paste.py`, `clipboard.py` — the latter since deleted as dead code). A maliciously-named
+  `.app` could inject AppleScript → now escaped/stripped via `_as_literal`.
+- **Secrets:** `FirstRunDialog` (since replaced by the wizard) writes the key to the **Keychain** (primary) and the
   `.env` fallback as **0600** (was world-readable 0644). Command Mode reads the key via
   `secrets.get_key` (Keychain-first), not `os.getenv` — it silently no-op'd for
   Keychain-only users.

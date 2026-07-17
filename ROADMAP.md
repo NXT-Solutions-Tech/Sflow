@@ -80,6 +80,55 @@ dictating/processing, then fades out and is fully hidden. No persistent idle pil
   from M2 to a future pass; dashboard footer still says "Groq Whisper" (cosmetic).
 - **Open decision:** none blocking.
 
+## Code review vs PRP + ROADMAP (2026-07-17) — **DONE ✅**
+
+A full review against [`PRP-sflow-local-llm.md`](PRP-sflow-local-llm.md) and this file
+(3 parallel audits: plan-vs-code, security, paste/focus). Verdict: the engine beats Wispr
+(CGEvent paste never touches the clipboard — *better* than the PRP's "clipboard survives"
+criterion; local STT by default; the pill genuinely never steals focus). What lagged was
+the **contract with the user**: three UI controls that lied. All fixed on `feat/onboarding`.
+
+- [x] **Command Mode toggle was inert** — `hotkey.py` never read `command_mode_enabled`,
+  yet it sat in `_restart_snapshot()`, so the Hub promised a relaunch and the user believed
+  it applied. It uploads audio **and the current selection** to Groq → now opt-in
+  (default `False`), honoured live, no relaunch.
+- [x] **"Focus Mode" switch was a placebo** — wrote a setting only a never-imported module
+  read. Removed with the module.
+- [x] **The cloud fallback was silent** — the default model is labelled *offline*; when MLX
+  failed the audio went to Groq behind a normal DONE check. Now `STATE_DONE_CLOUD` (amber,
+  held longer) via `_was_cloud_fallback()`.
+- [x] **Voice recordings leaked forever** — 26 of 44 WAVs on disk were orphans (5.8 MB): the
+  WAV was written *before* the insert, so any failed dictation left a permanent recording
+  the row-driven prune could never see. Now every no-insert path discards it, plus an
+  mtime sweep (`prune_orphan_audio_files`) as the net.
+- [x] **API key hygiene** — the `.env` cleartext copy was written *even when the Keychain
+  accepted* ("fallback" in name only, and nothing ever deleted it). Now Keychain-only
+  unless it refuses, created 0600 via `os.open`+`fchmod` (the old post-hoc `chmod` left a
+  world-readable window, and `O_TRUNC` alone inherits an existing 0644).
+- [x] **Paste stole focus** — `_restore_focus()` ran on *every* paste, activating an app
+  that was already frontmost: the flash, and a foco-grab if the user switched windows
+  mid-transcription. Dropped from the keystroke path (kept for clipboard, which needs it).
+- [x] **`copy_selection` lost selections silently** — compared clipboard *content*; now
+  `changeCount`. Plus `timeout` on the repo's only unguarded `subprocess`.
+- [x] **Prompt-injection guard was half-applied** — the PRP marked it "Keep that rule"; it
+  existed only in Medium. Added to `_BASE_RULES` (Light).
+- [x] **Author PII shipped to every user** — `db/snippets.py` seeded the upstream author's
+  real email/signature; "mi correo" pasted a stranger's address.
+- [x] **Tests wrote to the real `sflow.log`** — 93 lines per run into the user's dictation
+  log; simulated-failure WARNs read as real incidents (this cost the audit 10 minutes of
+  chasing a phantom). `conftest.py` now isolates both loggers.
+- [x] **Dead code + stale docs** — deleted `core/clipboard.py`, `core/focus_mode.py` (and
+  `core.clipboard` from `sflow.spec`'s hiddenimports, where it was pinned *because* nothing
+  imported it). Wired `core/dictation_actions.py`: the "dale enter" hotkey CLAUDE.md had
+  advertised for versions was implemented but never connected. CLAUDE.md corrected.
+- [x] **The PRP wasn't in the repo** — it lived in `~/Downloads`; this file's link to it had
+  always been broken. Committed.
+
+Deviations from the PRP, accepted: `STT_BACKEND`→`stt_model` and `ENHANCE_ENABLED`→
+`auto_cleanup_level` (both richer than the flags the PRP asked for), toggles in the Hub
+rather than the menu bar (criterion #78), `raw_text`/`enhanced_text` still deferred, and
+the raw-vs-enhanced dashboard retired with Flask.
+
 ## Post-audit backlog (2026-07-15)
 
 A 4-agent audit (backend, security, UX-vs-Wispr, stability) ran on the whole app. The
