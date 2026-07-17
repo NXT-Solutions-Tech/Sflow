@@ -13,6 +13,7 @@ La elección se hace por setting `paste_backend` ("keystroke" | "clipboard").
 import time
 import subprocess
 from config import get_setting
+from core.logger import log
 
 
 _saved_app: str | None = None
@@ -54,6 +55,9 @@ def save_frontmost_app():
 
 
 def _restore_focus():
+    """Activa la app guardada. SOLO para el path clipboard: Cmd+V va dirigido a
+    System Events y necesita la app destino activa. El path keystroke NO debe
+    llamar aquí — ver paste_text()."""
     global _saved_app
     if not _saved_app:
         return
@@ -108,19 +112,27 @@ def _clipboard_write(text: str):
         subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
 
 
-def _cmd_v():
-    subprocess.run(
-        ["osascript", "-e", 'tell application "System Events" to keystroke "v" using command down'],
-        check=True,
-    )
+def _cmd_v() -> bool:
+    """Cmd+V vía System Events. El timeout no es opcional: sin él, un osascript
+    colgado (p.ej. esperando un prompt de permisos) cuelga al hilo llamante
+    para siempre."""
+    try:
+        subprocess.run(
+            ["osascript", "-e", 'tell application "System Events" to keystroke "v" using command down'],
+            check=True, timeout=2,
+        )
+        return True
+    except Exception as e:
+        log(f"paste: Cmd+V failed ({e})", level="ERROR")
+        return False
 
 
-def _paste_via_clipboard(text: str):
+def _paste_via_clipboard(text: str) -> bool:
     global _saved_clipboard
     _saved_clipboard = _clipboard_read()
     _clipboard_write(text)
     _restore_focus()
-    _cmd_v()
+    ok = _cmd_v()
     # Restore user's original clipboard after brief delay so paste completes
     if _saved_clipboard is not None:
         def _restore():
@@ -131,6 +143,7 @@ def _paste_via_clipboard(text: str):
                 pass
         import threading
         threading.Thread(target=_restore, daemon=True).start()
+    return ok
 
 
 # ---------- Keystroke injection (default path) ----------
@@ -144,7 +157,7 @@ def _type_via_cgevent(text: str) -> bool:
             kCGHIDEventTap,
         )
     except Exception as e:
-        print(f"CGEvent unavailable: {e}")
+        log(f"paste: CGEvent unavailable ({e}) — falling back to clipboard", level="ERROR")
         return False
 
     # Chunk the text to avoid OS rate-limiting. Experimentally 20 chars per
@@ -169,19 +182,30 @@ def _type_via_cgevent(text: str) -> bool:
 
 
 # ---------- Public API ----------
-def paste_text(text: str):
-    """Insert text into the saved frontmost app. Routes via keystroke by default."""
+def paste_text(text: str) -> bool:
+    """Insert text into the saved frontmost app. Routes via keystroke by default.
+
+    Returns whether the text was delivered. The caller MUST honour it: the
+    clipboard path reports failure by returning False (osascript refused, TCC
+    revoked), not by raising, so discarding this flashes a green check over a
+    paste that never landed.
+    """
     global _saved_app
     if not text:
         _saved_app = None
-        return
+        return True
 
     backend = get_setting("paste_backend", "keystroke")
     streaming = get_setting("streaming_paste_enabled", False)
 
-    # Restore focus BEFORE typing so chars land in the right window
-    _restore_focus()
-
+    # OJO: el path keystroke NO restaura el foco. SFlow corre como accessory y
+    # la pill es un NonactivatingPanel, así que la app destino ya es frontmost y
+    # los CGEvent aterrizan solos. Activarla era un app-switch redundante (el
+    # flash) y, peor, si el usuario cambió de ventana durante la transcripción
+    # (~950ms) le arrancaba el foco de vuelta y escribía en la app vieja.
+    # El path clipboard sí lo necesita y lo hace él mismo en
+    # _paste_via_clipboard() — Cmd+V va vía System Events a la app activa.
+    ok = True
     if backend == "keystroke":
         if streaming and len(text) > 40:
             # For "streaming" feel with keystroke, we send chars in bursts
@@ -190,17 +214,18 @@ def paste_text(text: str):
                 chunk = p + (" " if i < len(parts) - 1 else "")
                 if not _type_via_cgevent(chunk):
                     # Fallback mid-operation
-                    _paste_via_clipboard(text[sum(len(x) + 1 for x in parts[:i]):])
+                    ok = _paste_via_clipboard(text[sum(len(x) + 1 for x in parts[:i]):])
                     break
                 time.sleep(0.02)
         else:
             ok = _type_via_cgevent(text)
             if not ok:
-                _paste_via_clipboard(text)
+                ok = _paste_via_clipboard(text)
     else:
-        _paste_via_clipboard(text)
+        ok = _paste_via_clipboard(text)
 
     _saved_app = None
+    return ok
 
 
 def paste_last_transcript(text: str):

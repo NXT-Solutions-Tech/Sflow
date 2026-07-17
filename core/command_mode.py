@@ -14,6 +14,7 @@ import time
 import subprocess
 from groq import Groq
 from config import LLM_CLEANUP_MODEL
+from core.logger import log
 
 
 _COMMAND_SYSTEM = """Eres un asistente que transforma texto según instrucciones del usuario.
@@ -42,14 +43,25 @@ def _read_clipboard() -> str:
         return ""
 
 
+def _change_count() -> int | None:
+    """NSPasteboard.changeCount() — se incrementa en CADA escritura al
+    pasteboard, aunque el contenido sea idéntico. None si no hay PyObjC."""
+    try:
+        from AppKit import NSPasteboard
+        return int(NSPasteboard.generalPasteboard().changeCount())
+    except Exception:
+        return None
+
+
 def copy_selection() -> str:
-    """Cmd+C then read clipboard. Compares to a pre-snapshot to detect whether
-    a selection actually landed. Restores the original clipboard so the user's
-    copied content is preserved.
+    """Cmd+C then read clipboard. Detects whether a selection actually landed
+    via the pasteboard's changeCount. Restores the original clipboard so the
+    user's copied content is preserved.
 
     Returns the selected text, or "" if nothing was selected.
     """
     before = _read_clipboard()
+    before_count = _change_count()
     try:
         subprocess.run(
             ["osascript", "-e",
@@ -60,11 +72,21 @@ def copy_selection() -> str:
         return ""
     time.sleep(0.08)
     after = _read_clipboard()
-    selected = after if (after and after != before) else ""
+    after_count = _change_count()
+
+    # changeCount es la única señal fiable de que Cmd+C escribió algo. Comparar
+    # el CONTENIDO fallaba en silencio en un caso muy común: copiar un texto,
+    # seleccionar ese mismo texto y hablarle — after == before, y Command Mode
+    # se creía sin selección. Fallback por contenido si PyObjC no está.
+    if before_count is not None and after_count is not None:
+        copied = after_count != before_count
+    else:
+        copied = bool(after) and after != before
+    selected = after if (copied and after) else ""
 
     # Restore user's previous clipboard (runs after we return so the caller
     # gets the selection text first; we're on a worker thread anyway).
-    if before is not None and before != after:
+    if copied and before != after:
         def _restore():
             time.sleep(0.05)
             try:
@@ -121,5 +143,5 @@ class CommandModeHandler:
                 result = result.strip("`").strip()
             return result or selected_text
         except Exception as e:
-            print(f"Command mode LLM failed: {e}")
+            log(f"command mode: LLM transform failed ({e})", level="ERROR")
             return selected_text
