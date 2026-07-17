@@ -208,7 +208,7 @@ class LLMCleanup:
                 "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
                 # Recomendado por OpenRouter para atribucion/rankings.
-                "HTTP-Referer": "https://github.com/daniel-carreon/sflow",
+                "HTTP-Referer": "https://github.com/NXT-Solutions-Tech/Sflow",
                 "X-Title": "SFlow",
             },
             json={

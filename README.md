@@ -5,14 +5,14 @@
 <h1 align="center">SFlow</h1>
 
 <p align="center">
-  <strong>Open-source voice-to-text for macOS. Wispr Flow alternative at 99% lower cost.</strong>
+  <strong>Private, on-device voice-to-text for macOS. Hold a hotkey, speak, and your words appear wherever your cursor is.</strong>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-15%2B-blue?style=flat-square" alt="macOS">
-  <img src="https://img.shields.io/badge/Python-3.12%2B-green?style=flat-square" alt="Python">
-  <img src="https://img.shields.io/badge/STT-Groq%20Whisper-orange?style=flat-square" alt="Groq Whisper">
-  <img src="https://img.shields.io/badge/Cost-%240.02%2Fhr-brightgreen?style=flat-square" alt="Cost">
+  <img src="https://img.shields.io/badge/Python-3.12-green?style=flat-square" alt="Python">
+  <img src="https://img.shields.io/badge/STT-on--device-brightgreen?style=flat-square" alt="On-device STT">
+  <img src="https://img.shields.io/badge/works-offline-brightgreen?style=flat-square" alt="Offline">
   <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License">
 </p>
 
@@ -20,23 +20,32 @@
 
 ## What is SFlow?
 
-SFlow is a **system-wide voice-to-text tool** for macOS. Hold a hotkey, speak, release — your words appear wherever your cursor is. Any app, any text field, any language.
+SFlow is a **system-wide voice-to-text tool** for macOS. Hold a hotkey, speak, release — your words appear wherever your cursor is. Any app, any text field.
 
-Built as a replacement for [Wispr Flow](https://wispr.com) ($15/month). SFlow uses [Groq's Whisper API](https://console.groq.com/docs/speech-to-text) at **~$0.02/hour** — that's roughly **$0.60/month** with heavy daily use.
+**By default it runs entirely on your Mac.** Transcription uses a local Whisper Turbo /
+Parakeet model (Apple MLX) — no account, no API key, no audio leaving your machine, $0.
+A Groq cloud model is available as an optional fallback for machines that can't run the
+local engine. Built as a free, private alternative to [Wispr Flow](https://wispr.com) ($15/month).
 
 ### Features
 
-- **Native macOS app** — lives in the menu bar, no terminal needed, starts with your Mac
-- **System-wide dictation** — works in any app (VS Code, Chrome, Slack, Notes, etc.)
-- **Two recording modes** — hold Ctrl+Alt (push-to-talk) or double-tap Ctrl (hands-free)
-- **Floating pill UI** — minimal overlay with real-time audio visualization bars
-- **No focus stealing** — pill floats above everything without interrupting your work (native macOS APIs)
-- **Auto-paste** — text appears exactly where your cursor was
-- **Native Hub** — light+dark dashboard (Cmd+Shift+H) to browse history, edit the dictionary, snippets, transforms, insights and settings
-- **SQLite history** — every transcription saved locally with timestamp and duration
-- **Multilingual** — supports all languages Whisper supports (English, Spanish, French, etc.)
-- **Guided first-run** — walks you through the microphone and the two macOS permissions,
-  with a live mic test and "granted ✓" polling. No config files to edit.
+- **On-device by default** — local Whisper Turbo (best accuracy) or Parakeet (fastest),
+  offline, private, free. Parakeet ships inside the app; Whisper Turbo is an optional
+  in-app download with a progress bar.
+- **Native macOS app** — lives in the menu bar, no terminal, starts with your Mac.
+- **System-wide dictation** — works in any app (VS Code, Chrome, Slack, Notes, …).
+- **Three recording modes** — hold `Ctrl+Alt` (push-to-talk), double-tap `Ctrl`
+  (hands-free), or an optional mouse button.
+- **Floating pill** — minimal overlay with a live audio visualizer; it never steals focus
+  (native macOS APIs). A distinct cloud glyph appears if a dictation ever falls back to the cloud.
+- **Optional AI cleanup** — remove fillers and fix punctuation via Groq, OpenRouter, or a
+  fully **local** model. Always fail-open: if it errors, you get the raw transcript.
+- **Native Hub** (`Cmd+Shift+H`) — light+dark dashboard for history (filter by app / model /
+  date), personal dictionary, snippets, transforms, insights, and settings.
+- **Bilingual UI** — English and Spanish, following your system language or a manual override.
+- **Local SQLite history** — every transcription saved on your Mac, and it self-heals if the file is ever corrupted.
+- **Guided first-run** — walks you through the mic and the two macOS permissions with a live
+  mic test and "granted ✓" polling. No config files to edit.
 
 ---
 
@@ -44,28 +53,27 @@ Built as a replacement for [Wispr Flow](https://wispr.com) ($15/month). SFlow us
 
 ### Prerequisites
 
-- macOS 15+
-- Python 3.12+
+- macOS 15+, Apple Silicon (for the local engine)
+- Python 3.12 (MLX does not install on 3.14)
 - [Homebrew](https://brew.sh)
-- [Groq API key](https://console.groq.com/keys) — **optional**, free tier available. Only
-  needed for the cloud models or Auto Cleanup; the default engine runs on your Mac.
+- A Groq API key is **optional** — only for the cloud model or cloud AI cleanup. The
+  default install needs no key.
 
-### Install (Desktop App — Recommended)
+### Install (Desktop App — recommended)
 
 ```bash
-# Clone
-git clone https://github.com/daniel-carreon/sflow.git
-cd sflow
+git clone https://github.com/NXT-Solutions-Tech/Sflow.git
+cd Sflow
 
-# System dependencies (portaudio = audio capture, ffmpeg = local STT audio decode)
-brew install portaudio ffmpeg
+# System dependency (audio capture)
+brew install portaudio
 
-# Python environment
-python3 -m venv venv
+# Python environment (must be 3.12 for MLX)
+python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Build the .app
+# Build the .app (bundles the Parakeet weights → ~1.1GB, fully offline)
 bash build.sh
 
 # Install (IMPORTANT: use ditto, not cp -r)
@@ -74,37 +82,26 @@ xattr -cr /Applications/SFlow.app
 ```
 
 Open SFlow from Spotlight or `/Applications`. On first launch a short wizard tests your
-microphone and walks you through the two macOS permissions SFlow needs (Accessibility, so
-it can type for you; Input Monitoring, so it can hear the hotkey). The
-[Groq API key](https://console.groq.com/keys) step is optional — skip it with **"Continuar
-sin conexión"** and SFlow transcribes entirely on your Mac.
+microphone and walks you through the two macOS permissions (Accessibility, so it can type
+for you; Input Monitoring, so it can hear the hotkey). The API-key step only appears if you
+picked a cloud model — otherwise choose **"Continuar sin conexión"** and dictate entirely
+on your Mac.
 
 ### Install (Dev Mode)
 
 ```bash
-git clone https://github.com/daniel-carreon/sflow.git
-cd sflow
-brew install portaudio ffmpeg
-python3 -m venv venv
+git clone https://github.com/NXT-Solutions-Tech/Sflow.git
+cd Sflow
+brew install portaudio
+python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-# Edit .env and paste your GROQ_API_KEY
-python3 main.py
+python3 main.py            # no API key needed for the default local engine
 ```
 
-### LLM cleanup provider (optional)
-
-The optional transcript cleanup (fillers removed, punctuation fixed) can run through
-either provider, selectable in **Ajustes → Procesamiento con LLM → Proveedor de limpieza**:
-
-- **Groq · Llama** — default, uses your existing `GROQ_API_KEY`.
-- **OpenRouter · GLM** — set `OPENROUTER_API_KEY` in `.env` (get one at
-  [openrouter.ai/keys](https://openrouter.ai/keys)); defaults to the `z-ai/glm-4.7-flash` model.
-
-Both are **fail-open**: if the network, key, or model errors out, SFlow pastes the raw
-transcript instead of blocking. In a packaged `.app`, `.env` lives at
-`~/Library/Application Support/SFlow/.env`.
+To use a cloud model or cloud AI cleanup, `cp .env.example .env` and paste your
+`GROQ_API_KEY` (or `OPENROUTER_API_KEY`). In a packaged `.app`, `.env` lives at
+`~/Library/Application Support/SFlow/.env`, and keys are stored in the macOS Keychain.
 
 ---
 
@@ -114,102 +111,54 @@ transcript instead of blocking. In a packaged `.app`, `.env` lives at
 |--------|----------|
 | **Push-to-talk** | Hold `Ctrl+Alt`, speak, release |
 | **Hands-free** | Double-tap `Ctrl` to start, tap `Ctrl` to stop |
-| **Command Mode** | Hold `Ctrl+Shift`, speak an instruction → transforms the selected text via LLM |
+| **Command Mode** (opt-in) | Hold `Ctrl+Shift`, speak an instruction → transforms the selected text |
 | **Transforms** | `Option+1…8` — apply the Nth custom transform to the selection |
 | **Open Hub** | `Cmd+Shift+H`, or menu bar → "Abrir Hub" |
 | **Paste last transcript** | `Cmd+Ctrl+V` |
-| **Start with macOS** | Toggle in menu bar → "Iniciar con macOS" |
-| **Quit** | Menu bar → "Salir" (or `Ctrl+C` in dev mode) |
+| **Pause / resume** | Menu bar → "Pausar SFlow" |
+| **Start with macOS** | Toggle in the menu bar |
 
-### Pill States
+### Pill states
 
 | State | Visual |
 |-------|--------|
 | Idle | Small pill with logo |
 | Recording | Expanded pill with animated audio bars |
 | Processing | Spinning dots |
-| Done | Green checkmark (auto-dismisses) |
-| Error | Red X (auto-dismisses) |
+| Done | Green checkmark |
+| Done (cloud fallback) | Amber cloud glyph — the audio went to the cloud |
+| Error | Red X + an in-app toast explaining what to do |
 
 ---
 
 ## macOS Permissions
 
-SFlow needs these permissions (System Settings → Privacy & Security):
+Grant these in System Settings → Privacy & Security (the first-run wizard links you straight there):
 
-1. **Accessibility** — for global hotkeys and auto-paste (add your Terminal app)
-2. **Microphone** — for audio capture (requested automatically)
-3. **Input Monitoring** — for keyboard listener (add your Terminal app)
+1. **Accessibility** — for global hotkeys and auto-paste
+2. **Microphone** — for audio capture
+3. **Input Monitoring** — for the keyboard listener
+
+> Note: without a Developer ID signature, macOS re-checks Accessibility on every rebuild.
+> If dictation stops typing after a rebuild, re-grant Accessibility (the wizard reopens to
+> that exact step). See [CLAUDE.md](CLAUDE.md).
 
 ---
 
 ## Architecture
 
 ```
-Hotkey (pynput) → Audio Capture (sounddevice) → Whisper Turbo (local) / Groq (fallback) → Auto-Paste (AppleScript)
-                        ↓                                                    ↓
-                  Audio Bars (QPainter)                              SQLite Database
-                        ↓                                                    ↓
-                  Floating Pill (PyQt6 + PyObjC)                    Native Hub (PyQt6, light+dark)
+Hotkey (pynput) → Audio (sounddevice) → local Whisper/Parakeet (MLX) [→ Groq fallback]
+                        │                          │
+                  Audio bars (QPainter)     smart commands → LLM cleanup → snippets
+                        │                          │
+             Floating pill (PyQt6+PyObjC)   Auto-paste (CGEvent) + SQLite + native Hub
 ```
 
-Key technical decisions:
-- **PyObjC/AppKit** for native macOS window that floats without stealing focus
-- **Qt QueuedConnection** for thread-safe signals between pynput and UI
-- **AppleScript** for reliable paste (pbcopy + keystroke "v")
-- **sounddevice + queue.Queue** for thread-safe audio visualization
-
----
-
-## Build It Yourself with Claude
-
-Want to build this from scratch? Copy [`PRP.md`](PRP.md) and paste it to [Claude](https://claude.ai) (or any AI assistant) with:
-
-> "Build this project following the PRP phases. Execute all phases sequentially, validating each one before moving to the next."
-
-The PRP contains the complete blueprint: architecture, gotchas, anti-patterns, and validation steps. It's designed so an AI agent can build the entire project in a single session.
-
-See [`CLAUDE.md`](CLAUDE.md) for detailed development instructions and troubleshooting.
-
----
-
-## Customization
-
-All configuration lives in `config.py`:
-
-```python
-# Hotkey
-DOUBLE_TAP_INTERVAL = 0.4  # seconds for double-tap detection
-
-# UI
-PILL_WIDTH_IDLE = 34        # pill width when idle (logo only)
-PILL_WIDTH_RECORDING = 120  # pill width during recording
-PILL_HEIGHT = 34            # pill height
-PILL_MARGIN_BOTTOM = 14     # distance from bottom of screen
-
-# Audio
-SAMPLE_RATE = 16000         # 16kHz mono (optimal for speech)
-NUM_BARS = 8                # number of visualizer bars
-BAR_GAIN = 6.0              # bar sensitivity
-BAR_DECAY = 0.80            # bar fall-off speed
-
-# STT
-GROQ_MODEL = "whisper-large-v3-turbo"  # fastest Groq model
-```
-
----
-
-## Cost Comparison
-
-| | Wispr Flow | SFlow |
-|---|---|---|
-| Monthly cost | $15/month | ~$0.60/month* |
-| Annual cost | $180/year | ~$7.20/year* |
-| Data control | Third-party | Local |
-| Customizable | No | Fully |
-| Open source | No | Yes |
-
-*\*Estimated for ~30 hours of transcription per month at $0.02/hour Groq pricing.*
+- **PyObjC/AppKit** — native floating window that never steals focus.
+- **Qt QueuedConnection** — thread-safe signals from the pynput thread to the UI.
+- **CGEvent keystrokes** — default paste path; never touches your clipboard.
+- **ModelManager** — bundle-first weight resolution, no implicit downloads.
 
 ---
 
@@ -217,25 +166,20 @@ GROQ_MODEL = "whisper-large-v3-turbo"  # fastest Groq model
 
 | Problem | Solution |
 |---------|----------|
-| Pill doesn't appear | Grant Accessibility permission to your terminal |
-| Pill steals focus | Verify PyObjC installed: `pip install pyobjc-framework-Cocoa` |
-| Audio not captured | Check Microphone permissions + `brew list portaudio` |
-| Records but no text / `ffmpeg` error in `sflow.log` | Local STT needs ffmpeg: `brew install ffmpeg`, then restart |
-| Paste goes to wrong app | This is the focus-steal issue — ensure PyObjC native setup works |
-| Ctrl+C doesn't quit | Should work out of the box (SIGINT handler). Try `kill %1` |
-| Dashboard not loading | Port auto-selects from 5678: `lsof -i :5678` |
-| .app crashes (segfault) | Reinstall with `ditto` (not `cp -r`): `ditto dist/SFlow.app /Applications/SFlow.app` |
-| .app blocked by macOS | Remove quarantine: `xattr -cr /Applications/SFlow.app` |
+| Pill doesn't appear | Grant Accessibility to your terminal/app |
+| Pill steals focus | Verify PyObjC: `python -c "import AppKit"` |
+| Audio not captured | Check Microphone permission + `brew list portaudio` |
+| Records but no text | Pick/download a local model in Ajustes → Modelo, or add a Groq key |
+| Hotkey does nothing | Input Monitoring revoked — the wizard's step re-grants it |
+| Paste stops after a rebuild | Re-grant Accessibility (ad-hoc signature changed) |
+| .app crashes (segfault) | Reinstall with `ditto`, not `cp -r` |
+| .app blocked by macOS | `xattr -cr /Applications/SFlow.app` |
+
+For the full development guide, gotchas, and the model catalog, see [CLAUDE.md](CLAUDE.md)
+and [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
 ## License
 
-MIT License. Do whatever you want with it.
-
----
-
-<p align="center">
-  Built with Claude Opus 4.6 in a single session.<br>
-  <sub>From <a href="https://github.com/daniel-carreon">daniel-carreon</a> — <strong>S</strong><strong>f</strong>low</sub>
-</p>
+MIT — see [LICENSE](LICENSE). This is a fork; the upstream MIT copyright is preserved.

@@ -45,7 +45,7 @@ no terminal. Menu-bar app. On first launch the **onboarding wizard** runs
 pide si el modelo activo es de nube o si Auto Cleanup está encendido — el default
 (`whisper-turbo-local`) arranca sin key.
 
-### Modelos de transcripción SELECCIONABLES (v2.6, 12-jul-2026)
+### Modelos de transcripción SELECCIONABLES (v3.0)
 Catálogo en `config.py` → `STT_MODELS` (3), elegible en Hub → Ajustes → "Modelo":
 1. **whisper-turbo-local** (`mlx-community/whisper-large-v3-turbo`) — DEFAULT. Mejor
    precisión es (WER 2.9%), offline, usa el diccionario personal. ~950ms warm en M4.
@@ -82,26 +82,23 @@ Los modelos se descargan a `~/.cache/huggingface` en el primer uso (~1.6GB turbo
 - **Microphone**: Automatically requested on first use
 - **Input Monitoring**: May be required for pynput — add your Terminal/IDE
 
-## Benchmark: local model selection (M-series, Spanish voice, real samples)
+## Benchmark: local model selection (M4, Spanish voice, real samples, 12-jul-2026)
 
-> ⚠️ SUPERSEDED 12-jul-2026 (M4, mlx 0.32, voz real es, warm mediana de 3): la tabla de
-> abajo (mlx viejo) daba turbo en ~4.7s = FALSO hoy. Números frescos:
-> **whisper-large-v3-turbo ~950ms (WER 2.9%, mejor)** · **parakeet-v3 ~280ms (WER 4.3%, más rápido)** ·
-> groq ~1.4-2.7s. Por eso el default cambió a whisper-large-v3-turbo local (antes whisper-small).
+Warm median latency + WER on an M4 (mlx 0.32, real es voice):
+**whisper-large-v3-turbo ~950ms (WER 2.9%, best accuracy, default)** ·
+**parakeet-v3 ~280ms (WER 4.3%, fastest, bundled)** · groq ~1.4-2.7s (cloud fallback).
 
-| Model | short 3s | medium 10s | long 30s | Notes |
-|---|---|---|---|---|
-| whisper-tiny-mlx | 0.31s 🥇 | 3.13s | 10.91s | fastest for short clips, weaker punctuation |
-| whisper-base-mlx | 2.57s | 5.09s | 6.34s | ok |
-| **whisper-small-mlx** | 1.11s | **1.05s** 🥇 | **3.92s** 🥇 | **default** — best overall |
-| whisper-large-v3-turbo | 4.68s | 5.11s | 10.70s | slower than cloud Groq |
-| parakeet-tdt-0.6b-v3 | 2.87s | 4.21s | 7.70s | promising but slow in practice |
-| faster-whisper (CT2) | — | — | — | not tested: poor on ARM |
+To re-verify a build's local engines end to end, run `SFlow --selftest-stt` (or
+`python main.py --selftest-stt`) — it loads each local model and prints PASS/FAIL.
 
-Bench script: `/tmp/sflow_bench/bench.py` (generates voice via `say -v Paulina`,
-16kHz mono WAV, warms up each model, records hot inference time).
+## Project Structure (v3.0 — offline real + i18n + product UX)
 
-## Project Structure (v2.5 — with Hub + CGEvent paste + benchmarked local)
+New in v3.0 (see CHANGELOG.md): `core/models.py` (ModelManager — bundle-first weight
+resolution, no implicit downloads, `ModelNotDownloaded`), `core/i18n.py` (`tr()` +
+`language` setting, es/en catalog), `core/token_budget.py` (dynamic max_tokens),
+`core/sounds.py` (start/done chirps), `ui/model_download.py` (cancelable download),
+`ui/toast.py` (in-app error toast). `config.APP_VERSION` is the single version source
+(sflow.spec + the Hub's About line read it).
 
 ```
 sflow/
@@ -140,7 +137,7 @@ sflow/
     └── transcriptions.db        # History
 ```
 
-## Hotkeys (v2.5)
+## Hotkeys (v3.0)
 
 | Combo | Mode |
 |---|---|

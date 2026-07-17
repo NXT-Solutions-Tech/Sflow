@@ -18,7 +18,7 @@ from db.snippets import SnippetsDB
 from core.paste import paste_last_transcript
 from core.relaunch import relaunch_app
 from config import (
-    LOGO_PATH, DICTIONARY_PATH, get_setting, set_setting, STT_MODELS,
+    LOGO_PATH, DICTIONARY_PATH, APP_VERSION, get_setting, set_setting, STT_MODELS,
 )
 from core.recorder import list_input_devices
 from core.secrets import set_key, key_source
@@ -1435,6 +1435,10 @@ class HubWindow(QWidget):
         for b in (self.btn_home, self.btn_insights, self.btn_hist, self.btn_dict, self.btn_snip, self.btn_trans, self.btn_set):
             sl.addWidget(b)
         sl.addStretch()
+        # About line — the one place the version shows (reads config.APP_VERSION).
+        about = QLabel(f"SFlow v{APP_VERSION}")
+        about.setStyleSheet(f"color: {C.TEXT_FAINT}; font-size: 11px; padding: 4px 12px;")
+        sl.addWidget(about)
         self.btn_home.setChecked(True)
         root.addWidget(side)
 

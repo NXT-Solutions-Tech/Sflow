@@ -5,6 +5,13 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_sub
 
 block_cipher = None
 
+# Single version source: read config.APP_VERSION without importing config (which
+# would run its import-time side effects). Bump the version in config.py only.
+import re as _re
+with open('config.py', encoding='utf-8') as _f:
+    _m = _re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', _f.read())
+APP_VERSION = _m.group(1) if _m else '0.0.0'
+
 # --- Collect PyObjC frameworks ---
 pyobjc_datas = []
 pyobjc_binaries = []
@@ -194,8 +201,8 @@ app = BUNDLE(
             'SFlow usa AppleScript para pegar texto en otras aplicaciones.',
         'CFBundleDisplayName': 'SFlow',
         'CFBundleName': 'SFlow',
-        'CFBundleVersion': '1.0.0',
-        'CFBundleShortVersionString': '1.0.0',
+        'CFBundleVersion': APP_VERSION,
+        'CFBundleShortVersionString': APP_VERSION,
         'LSApplicationCategoryType': 'public.app-category.productivity',
         'NSHighResolutionCapable': True,
     },

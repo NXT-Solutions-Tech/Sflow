@@ -2,6 +2,10 @@ import os
 import sys
 import json
 
+# Single source of truth for the app version. sflow.spec (bundle metadata) and
+# the Hub's About line both read this — bump it here and nowhere else.
+APP_VERSION = "3.0.0"
+
 
 def _get_resource_dir() -> str:
     """Read-only bundled assets (logo, etc). PyInstaller puts them in sys._MEIPASS."""
