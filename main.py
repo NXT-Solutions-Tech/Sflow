@@ -8,6 +8,7 @@ import sys
 import signal
 import subprocess
 import threading
+import time
 import traceback
 import multiprocessing
 
@@ -36,6 +37,7 @@ from core.command_mode import CommandModeHandler, copy_selection
 from core.transform import TransformHandler
 from core.relaunch import relaunch_app
 from core.logger import log, log_exc
+from core import error_messages, permissions
 from db.database import TranscriptionDB
 from config import LOGO_PATH, APP_DATA_DIR, AUDIO_DIR, get_setting, get_stt_model
 from ui import theme
@@ -294,6 +296,9 @@ class SFlowApp(QObject):
 
         self._selected_text_snapshot = ""
         self._last_text: str = ""  # For "paste last transcript" hotkey
+        self._tray: QSystemTrayIcon | None = None
+        self._last_notify_code = ""
+        self._last_notify_ts = 0.0
 
         self.pill.visualizer.set_audio_queue(self.recorder.audio_queue)
 
@@ -332,6 +337,36 @@ class SFlowApp(QObject):
                     pass
         except Exception as e:
             log_exc("audio prune failed", e)
+
+    def set_tray(self, tray: QSystemTrayIcon):
+        """The tray icon is the delivery vehicle for error toasts. It's built
+        after SFlowApp, so it gets handed back here."""
+        self._tray = tray
+
+    def notify(self, toast):
+        """Surface an error as a system notification.
+
+        Strictly additive: the pill's ERROR state is the guaranteed feedback, so
+        nothing here may affect control flow. Notifications can be silently
+        dropped by macOS (Do Not Disturb, unsigned dev builds) and that must
+        never turn into a crash or a swallowed failure.
+        """
+        try:
+            if self._tray is None or not QSystemTrayIcon.supportsMessages():
+                return
+            now = time.time()
+            if not error_messages.should_notify(
+                toast.code, self._last_notify_code, self._last_notify_ts, now
+            ):
+                return
+            self._last_notify_code = toast.code
+            self._last_notify_ts = now
+            self._tray.showMessage(
+                toast.title, toast.body,
+                QSystemTrayIcon.MessageIcon.Warning, 4000,
+            )
+        except Exception as e:
+            log_exc("notify failed (suppressed)", e)
 
     def shutdown(self):
         """Best-effort teardown on quit: stop the global hotkey listener and any
@@ -412,23 +447,29 @@ class SFlowApp(QObject):
                 self.transcription_done.emit(text, duration, model_id)
             else:
                 log("transcribe returned empty text", level="WARN")
-                self.transcription_error.emit("No speech detected")
+                self.transcription_error.emit(error_messages.CODE_SILENCE)
         except Exception as e:
+            # The raw exception stays in the log; the UI gets a code it can
+            # turn into words the user can act on.
             log_exc("transcribe FAILED", e)
-            self.transcription_error.emit(str(e))
+            self.transcription_error.emit(error_messages.classify_exception(e))
 
     @pyqtSlot(str, float, str)
     def _on_transcription_done(self, text: str, duration: float, model_id: str):
         log(f"transcription_done: chars={len(text)}")
         final_text = text
+        paste_ok = True
         try:
             paste_text(final_text)
             log("paste ok")
         except Exception as e:
+            paste_ok = False
             log_exc("paste FAILED", e)
         self._last_text = final_text
         audio_path = getattr(self, "_pending_audio_path", None)
         self._pending_audio_path = None
+        # Insert even when the paste failed: history is the recovery path the
+        # "no se pudo pegar" toast points the user at.
         try:
             self.db.insert(
                 text=final_text, duration_seconds=duration,
@@ -437,6 +478,11 @@ class SFlowApp(QObject):
             )
         except Exception as e:
             log_exc("db.insert FAILED", e)
+        if not paste_ok:
+            # A checkmark here would claim the text landed somewhere it didn't.
+            self.pill.set_state(PillWidget.STATE_ERROR)
+            self.notify(error_messages.message_for(error_messages.CODE_PASTE_FAILED))
+            return
         self.pill.set_state(
             PillWidget.STATE_DONE_CLOUD if _was_cloud_fallback(model_id) else PillWidget.STATE_DONE
         )
@@ -471,7 +517,7 @@ class SFlowApp(QObject):
         save_frontmost_app()
         selection = copy_selection()
         if not selection:
-            self.pill.set_state(PillWidget.STATE_ERROR)
+            self.command_error.emit(error_messages.CODE_NO_SELECTION)
             return
         self.pill.set_state(PillWidget.STATE_PROCESSING)
 
@@ -480,13 +526,17 @@ class SFlowApp(QObject):
                 result = self.transform.run(index, selection)
                 self.command_done.emit(result)
             except Exception as e:
-                self.command_error.emit(str(e))
+                log_exc("transform FAILED", e)
+                self.command_error.emit(error_messages.classify_exception(e))
         threading.Thread(target=worker, daemon=True).start()
 
     @pyqtSlot(str)
-    def _on_transcription_error(self, error: str):
-        log(f"ERROR state: {error}", level="ERROR")
+    def _on_transcription_error(self, code: str):
+        """Both error signals land here. The payload is an error_messages code."""
+        toast = error_messages.message_for(error_messages.classify_message(code))
+        log(f"ERROR state: {toast.code}", level="ERROR")
         self.pill.set_state(PillWidget.STATE_ERROR)
+        self.notify(toast)
 
     # ------- Command Mode flow -------
     @pyqtSlot()
@@ -521,7 +571,7 @@ class SFlowApp(QObject):
             # Command Mode always uses Groq (fast cloud STT) — bypass local backend
             voice = self.groq_raw.transcribe(wav_buffer)
             if not voice:
-                self.command_error.emit("No voice command detected")
+                self.command_error.emit(error_messages.CODE_SILENCE)
                 return
             result = self.command.transform(voice, selection)
             # Persist both voice command and result for history
@@ -535,12 +585,21 @@ class SFlowApp(QObject):
                 pass
             self.command_done.emit(result)
         except Exception as e:
-            self.command_error.emit(str(e))
+            log_exc("command mode FAILED", e)
+            self.command_error.emit(error_messages.classify_exception(e))
 
     @pyqtSlot(str)
     def _on_command_done(self, result: str):
-        paste_text(result)
         self._last_text = result
+        try:
+            paste_text(result)
+        except Exception as e:
+            # Command Mode replaces a selection — claiming success when the
+            # keystrokes never landed is worse here than anywhere else.
+            log_exc("command paste FAILED", e)
+            self.pill.set_state(PillWidget.STATE_ERROR)
+            self.notify(error_messages.message_for(error_messages.CODE_PASTE_FAILED))
+            return
         self.pill.set_state(PillWidget.STATE_DONE)
 
 
@@ -657,7 +716,7 @@ def main():
         sflow.hub.raise_()
         sflow.hub.activateWindow()
 
-    tray = _setup_tray(app, open_hub)  # noqa: F841
+    sflow.set_tray(_setup_tray(app, open_hub))
 
     sys.exit(app.exec())
 
