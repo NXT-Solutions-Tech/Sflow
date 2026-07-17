@@ -34,6 +34,26 @@ pip install pyinstaller --quiet 2>/dev/null
 echo "[3/5] Limpiando builds anteriores..."
 rm -rf build/ dist/
 
+# --- Step 3b: Stage the bundled Parakeet weights (the offline guarantee) ---
+# Populates models/<repo-basename> from the HF cache (or downloads once) so the
+# spec's Tree can bundle it INTO the .app. The dir name MUST be the repo basename
+# — that's exactly what core.models.bundle_dir() resolves under sys._MEIPASS.
+echo "[3b/5] Preparando pesos de Parakeet (bundle offline)..."
+python - <<'PY'
+import os, sys
+from huggingface_hub import snapshot_download
+repo = "mlx-community/parakeet-tdt-0.6b-v3"
+dest = os.path.join("models", repo.split("/")[-1])
+os.makedirs("models", exist_ok=True)
+try:
+    path = snapshot_download(repo, local_dir=dest)
+    print("   staged:", path)
+except Exception as e:
+    print("   ADVERTENCIA: no se pudo preparar Parakeet (%s). El .app NO tendra "
+          "el motor offline garantizado; se descargara en primer uso." % e)
+    sys.exit(0)  # no bloquea el build; el runtime cae a descarga/Groq
+PY
+
 # --- Step 4: Build ---
 echo "[4/5] Construyendo .app (esto toma ~1-2 min)..."
 pyinstaller sflow.spec --noconfirm 2>&1 | tail -5

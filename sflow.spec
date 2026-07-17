@@ -52,6 +52,14 @@ datas += sounddevice_datas
 datas += pyobjc_datas
 datas += mlx_datas
 
+# --- Bundled model weights (offline guarantee) ---
+# build.sh stages models/<repo-basename> from the HF cache. Bundle the whole
+# models/ tree so core.models.bundle_dir() resolves it under sys._MEIPASS at
+# runtime with no download. Skipped cleanly if staging didn't run (dev build).
+import os as _os
+if _os.path.isdir('models'):
+    datas += Tree('models', prefix='models')
+
 a = Analysis(
     ['main.py'],
     pathex=[],

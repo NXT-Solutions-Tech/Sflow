@@ -21,3 +21,6 @@ PROMPT-RUST.md
 
 # runtime voice recordings (never track)
 audio/
+
+# Staged model weights (bundled into the .app by build.sh; ~600MB, not source)
+models/
