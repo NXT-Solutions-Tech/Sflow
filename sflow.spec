@@ -97,7 +97,6 @@ a = Analysis(
         'core.command_mode',
         'core.hotkey',
         'core.recorder',
-        'core.clipboard',
         'ui.pill_widget',
         'ui.audio_visualizer',
         'ui.red_dot_indicator',
