@@ -113,7 +113,7 @@ def store_api_key(key: str, data_dir: str) -> bool:
 
     Returns whether the Keychain write worked.
     """
-    from core.secrets import set_key
+    from core.secrets import set_key, set_runtime_key
 
     stored = False
     try:
@@ -132,5 +132,8 @@ def store_api_key(key: str, data_dir: str) -> bool:
         with os.fdopen(fd, "w") as f:
             f.write(f"GROQ_API_KEY={key}\n")
 
-    os.environ["GROQ_API_KEY"] = key
+    # Make the key visible to THIS process immediately — but never via os.environ,
+    # which would hand it to every subprocess (numba spawn workers re-exec the
+    # binary). The secrets override is in-memory and per-process.
+    set_runtime_key("GROQ_API_KEY", key)
     return stored

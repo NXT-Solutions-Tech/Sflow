@@ -25,12 +25,14 @@ CODE_SERVER = "server"
 CODE_PERMISSION = "permission"
 CODE_PASTE_FAILED = "paste_failed"
 CODE_NO_SELECTION = "no_selection"
+CODE_DB_CORRUPT = "db_corrupt"
+CODE_RECORDING_CAPPED = "recording_capped"
 CODE_UNKNOWN = "unknown"
 
 CODES = (
     CODE_SILENCE, CODE_HALLUCINATION, CODE_NO_KEY, CODE_AUTH, CODE_RATE_LIMIT,
     CODE_OFFLINE, CODE_TIMEOUT, CODE_SERVER, CODE_PERMISSION, CODE_PASTE_FAILED,
-    CODE_NO_SELECTION, CODE_UNKNOWN,
+    CODE_NO_SELECTION, CODE_DB_CORRUPT, CODE_RECORDING_CAPPED, CODE_UNKNOWN,
 )
 
 
@@ -84,6 +86,14 @@ _MESSAGES = {
     CODE_NO_SELECTION: Toast(
         CODE_NO_SELECTION, "No hay texto seleccionado",
         "Selecciona el texto que quieres transformar y vuelve a intentarlo.",
+    ),
+    CODE_DB_CORRUPT: Toast(
+        CODE_DB_CORRUPT, "Historial dañado",
+        "El archivo de historial estaba corrupto. SFlow empezó uno nuevo y guardó el anterior por si acaso.",
+    ),
+    CODE_RECORDING_CAPPED: Toast(
+        CODE_RECORDING_CAPPED, "Grabación detenida",
+        "Manos libres se detuvo sola al llegar al límite de tiempo. Tu dictado se está procesando.",
     ),
     CODE_UNKNOWN: Toast(
         CODE_UNKNOWN, "Algo falló",

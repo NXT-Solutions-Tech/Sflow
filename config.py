@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-from dotenv import load_dotenv
 
 
 def _get_resource_dir() -> str:
@@ -24,7 +23,9 @@ _DATA_DIR = _get_data_dir()
 if getattr(sys, "frozen", False):
     os.makedirs(_DATA_DIR, exist_ok=True)
 
-load_dotenv(os.path.join(_DATA_DIR, ".env"))
+# NOTE: the .env is deliberately NOT loaded into os.environ (no python-dotenv).
+# core/secrets.py parses it into a process-private dict instead, so the key never
+# leaks to the numba/librosa spawn workers that re-exec this binary.
 
 # --- Settings file (runtime-mutable via UI) ---
 SETTINGS_PATH = os.path.join(_DATA_DIR, "settings.json")
@@ -47,10 +48,10 @@ def _default_settings() -> dict:
         # el motor MLX no esta disponible en runtime.
         "stt_model": "whisper-turbo-local",
         "stt_language": "auto",  # "auto" = autodeteccion (ES/EN/...); o codigo ISO como "es"/"en" para forzar
-        "transcribe_backend": "groq",   # LEGACY — migrado a stt_model (ver load_settings)
         "auto_cleanup_level": "none",  # "none" | "light" | "medium" (M2 Auto Cleanup). none = sin LLM.
-        "llm_cleanup_enabled": False,  # LEGACY — migrado a auto_cleanup_level (ver load_settings).
-        "llm_model": "llama-3.3-70b-versatile",  # modelo con mejor instruction-following (menos alucinaciones)
+        # NOTE: legacy keys transcribe_backend / llm_cleanup_enabled are NOT defaults
+        # anymore. load_settings() still migrates them off an existing file (it reads
+        # `loaded`, not defaults), but a fresh install never carries the dead keys.
         "llm_cleanup_provider": "groq",  # "groq" (Llama) | "openrouter" (GLM). Default groq = comportamiento actual, GLM es opt-in.
         "openrouter_cleanup_model": "z-ai/glm-4.7-flash",  # slug OpenRouter para el proveedor GLM (verificar vigencia)
         "context_aware_tone": True,
@@ -67,7 +68,6 @@ def _default_settings() -> dict:
         "command_mode_enabled": False,
         "paste_backend": "keystroke",  # "keystroke" | "clipboard"
         "save_audio_for_retry": True,
-        "history_hotkey_enabled": True,
         "sound_on_start": False,
         "sound_on_done": False,
         "snippets_enabled": True,
@@ -192,6 +192,10 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 AUDIO_DTYPE = "int16"
 BLOCK_SIZE = 1024
+# Hands-free recording runs unattended until the user taps Ctrl again. A stuck
+# session (they forgot, walked away) would record forever and hold the mic — cap
+# it and auto-stop with a toast. Hold-to-talk is self-limiting (finger on key).
+RECORDING_CAP_SECONDS = 5 * 60
 
 # --- UI ---
 PILL_WIDTH_IDLE = 34

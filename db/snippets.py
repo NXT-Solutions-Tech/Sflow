@@ -19,8 +19,17 @@ class SnippetsDB:
         self.db_path = db_path
         self._init()
 
+    def _connect(self) -> sqlite3.Connection:
+        """WAL + busy timeout, matching TranscriptionDB — snippets share the same
+        file, so a snippet write must not raise "database is locked" when a
+        dictation is inserting at the same moment."""
+        conn = sqlite3.connect(self.db_path, timeout=5.0)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        return conn
+
     def _init(self):
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS snippets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +42,7 @@ class SnippetsDB:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_snippets_trigger ON snippets(trigger)")
 
     def list_all(self) -> list[dict]:
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 "SELECT * FROM snippets ORDER BY usage_count DESC, trigger"
@@ -45,7 +54,7 @@ class SnippetsDB:
         expansion = expansion or ""
         if not trigger or not expansion:
             raise ValueError("trigger y expansion son requeridos")
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             c = conn.execute(
                 "INSERT INTO snippets (trigger, expansion) VALUES (?, ?)",
                 (trigger, expansion),
@@ -53,18 +62,18 @@ class SnippetsDB:
             return c.lastrowid
 
     def update(self, snippet_id: int, trigger: str, expansion: str):
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             conn.execute(
                 "UPDATE snippets SET trigger = ?, expansion = ? WHERE id = ?",
                 (trigger.strip().lower(), expansion, snippet_id),
             )
 
     def delete(self, snippet_id: int):
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             conn.execute("DELETE FROM snippets WHERE id = ?", (snippet_id,))
 
     def increment_usage(self, snippet_id: int):
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             conn.execute(
                 "UPDATE snippets SET usage_count = usage_count + 1 WHERE id = ?",
                 (snippet_id,),

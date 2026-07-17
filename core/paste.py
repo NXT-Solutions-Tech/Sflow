@@ -229,13 +229,18 @@ def paste_text(text: str) -> bool:
 
 
 def paste_last_transcript(text: str):
-    """Alternative entry point for the 'paste last' hotkey — no focus restore
-    because the user invoked it from the app they want the paste in."""
+    """Alternative entry point for the 'paste last' hotkey.
+
+    The clipboard path goes through _paste_via_clipboard so the user's own
+    clipboard is saved and restored — the old inline _clipboard_write + _cmd_v
+    clobbered it permanently, silently replacing whatever they'd copied with the
+    transcript. No focus restore is needed here (_restore_focus no-ops with no
+    saved app): the user invoked this from the app they want the paste in."""
+    if not text:
+        return
     backend = get_setting("paste_backend", "keystroke")
     if backend == "keystroke":
         if not _type_via_cgevent(text):
-            _clipboard_write(text)
-            _cmd_v()
+            _paste_via_clipboard(text)
     else:
-        _clipboard_write(text)
-        _cmd_v()
+        _paste_via_clipboard(text)

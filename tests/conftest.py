@@ -48,4 +48,15 @@ def _isolate_settings(tmp_path, monkeypatch):
                 monkeypatch.setattr(mod, attr, str(data_dir / filename))
 
     config._SETTINGS = config._default_settings()
+
+    # Secrets keeps process-global state (runtime overrides + a per-path .env
+    # cache). Without clearing it a key stored in one test would bleed into the
+    # next, and a cached .env parse for a since-deleted tmp path would be stale.
+    try:
+        import core.secrets as _secrets
+        _secrets._overrides.clear()
+        _secrets._env_cache.clear()
+    except Exception:
+        pass
+
     yield

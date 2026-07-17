@@ -170,8 +170,10 @@ def test_empty_peaks_is_not_a_pass():
 def test_store_api_key_keeps_the_key_out_of_the_filesystem(tmp_path, monkeypatch):
     """Keychain accepted → no cleartext copy. A .env written "as interop" would
     outlive the Keychain entry and nothing ever deletes it."""
+    import core.secrets as S
     calls = []
     monkeypatch.setattr("core.secrets.set_key", lambda n, v: calls.append((n, v)) or True)
+    monkeypatch.setattr(S, "keyring", None)  # isolate from the real macOS Keychain
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     key = "gsk_" + "a" * 40
 
@@ -179,7 +181,10 @@ def test_store_api_key_keeps_the_key_out_of_the_filesystem(tmp_path, monkeypatch
 
     assert calls == [("GROQ_API_KEY", key)]
     assert not (tmp_path / ".env").exists()
-    assert os.environ["GROQ_API_KEY"] == key
+    # The key must NOT reach os.environ — subprocesses (numba spawn workers) would
+    # inherit it. The running process instead sees it via the secrets override.
+    assert "GROQ_API_KEY" not in os.environ
+    assert S.get_key("GROQ_API_KEY") == key
 
 
 def test_env_is_the_fallback_when_the_keychain_fails(tmp_path, monkeypatch):

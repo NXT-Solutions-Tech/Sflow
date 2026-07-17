@@ -6,6 +6,7 @@ transform pasted back replacing the selection.
 """
 from groq import Groq
 from config import LLM_CLEANUP_MODEL, get_setting
+from core.token_budget import max_tokens_for
 
 
 _SYSTEM = """Eres un asistente que transforma texto según una instrucción dada.
@@ -55,7 +56,9 @@ class TransformHandler:
                     {"role": "user", "content": user_msg},
                 ],
                 temperature=0.3,
-                max_tokens=2000,
+                # Un transform "expande esta idea" produce mucho mas texto que la
+                # entrada; escala con user_msg y nunca baja del minimo historico.
+                max_tokens=max_tokens_for(user_msg, floor=2000),
             )
             result = (completion.choices[0].message.content or "").strip()
             if result.startswith("```") and result.endswith("```"):

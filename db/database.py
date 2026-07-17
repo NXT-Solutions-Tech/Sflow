@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import time
 from contextlib import closing
@@ -24,10 +25,72 @@ def _compute_streak(per_day: dict) -> int:
 class TranscriptionDB:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
+        # Set True when a corrupt file was quarantined and recreated, so main.py
+        # can surface a toast ("history was damaged, started fresh") instead of
+        # the recovery being invisible.
+        self.recovered_from_corruption = False
         self._init_db()
 
+    def _connect(self) -> sqlite3.Connection:
+        """A connection in WAL mode with a busy timeout.
+
+        WAL lets a reader (the Hub) and a writer (a live dictation insert)
+        proceed at once; busy_timeout makes a second writer wait instead of
+        raising "database is locked" when the retry-from-history path overlaps a
+        dictation. Both are cheap no-ops once the file is already in WAL mode.
+        """
+        conn = sqlite3.connect(self.db_path, timeout=5.0)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        return conn
+
+    def _secure_perms(self):
+        """0600 on the DB and its WAL side files — they hold transcript text,
+        which can include passwords/2FA, so no other user on the box should read
+        them. Idempotent; runs on every init."""
+        for suffix in ("", "-wal", "-shm"):
+            p = self.db_path + suffix
+            try:
+                if os.path.exists(p):
+                    os.chmod(p, 0o600)
+            except OSError:
+                pass
+
     def _init_db(self):
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        try:
+            self._create_schema()
+        except sqlite3.DatabaseError:
+            # A corrupt file lets sqlite3.connect() succeed (it's lazy) but makes
+            # the first real statement raise ("file is not a database" / "disk
+            # image is malformed"). That used to crash at launch, in __init__,
+            # which the excepthook doesn't cover. Quarantine the bytes and start
+            # fresh — a working app beats a lost history — keeping the old file as
+            # .corrupt-<ts> for anyone who wants to run recovery tooling on it.
+            self._quarantine_corrupt_db()
+            self._create_schema()
+            self.recovered_from_corruption = True
+        self._secure_perms()
+
+    def _quarantine_corrupt_db(self):
+        ts = time.strftime("%Y%m%d-%H%M%S")
+        try:
+            os.replace(self.db_path, f"{self.db_path}.corrupt-{ts}")
+        except OSError:
+            # Can't move it — unlink so the recreate has a clean slate. If that
+            # fails too, let the retry surface the original error.
+            try:
+                os.remove(self.db_path)
+            except OSError:
+                pass
+        # WAL side files can carry the same corruption.
+        for suffix in ("-wal", "-shm"):
+            try:
+                os.remove(self.db_path + suffix)
+            except OSError:
+                pass
+
+    def _create_schema(self):
+        with closing(self._connect()) as conn, conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS transcriptions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,7 +122,7 @@ class TranscriptionDB:
                model: str = "whisper-large-v3-turbo", audio_path: str = None,
                app: str = None) -> int:
         word_count = len((text or "").split())
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             cursor = conn.execute(
                 "INSERT INTO transcriptions (text, language, duration_seconds, model, audio_path, app, word_count) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -69,7 +132,7 @@ class TranscriptionDB:
 
     def insights(self) -> dict:
         """Aggregate stats for the Insights page: totals, WPM, per-app, streak, per-day."""
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             conn.row_factory = sqlite3.Row
             t = conn.execute(
                 "SELECT COUNT(*) c, COALESCE(SUM(word_count),0) w, COALESCE(SUM(duration_seconds),0) s "
@@ -90,14 +153,14 @@ class TranscriptionDB:
         }
 
     def update_text(self, row_id: int, new_text: str):
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             conn.execute(
                 "UPDATE transcriptions SET text = ? WHERE id = ?",
                 (new_text, row_id),
             )
 
     def get_recent(self, limit: int = 20) -> list:
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 "SELECT * FROM transcriptions ORDER BY created_at DESC LIMIT ?",
@@ -106,13 +169,13 @@ class TranscriptionDB:
             return [dict(row) for row in rows]
 
     def get(self, row_id: int) -> dict | None:
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             conn.row_factory = sqlite3.Row
             r = conn.execute("SELECT * FROM transcriptions WHERE id = ?", (row_id,)).fetchone()
             return dict(r) if r else None
 
     def search(self, query: str, limit: int = 20) -> list:
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 "SELECT * FROM transcriptions WHERE text LIKE ? ORDER BY created_at DESC LIMIT ?",
@@ -121,13 +184,13 @@ class TranscriptionDB:
             return [dict(row) for row in rows]
 
     def count(self) -> int:
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             return conn.execute("SELECT COUNT(*) FROM transcriptions").fetchone()[0]
 
     def referenced_audio_paths(self) -> set[str]:
         """Every WAV a live row still points at — i.e. the ones "re-transcribir
         desde el historial" needs on disk."""
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             return {
                 r[0] for r in conn.execute(
                     "SELECT audio_path FROM transcriptions WHERE audio_path IS NOT NULL"
@@ -173,7 +236,7 @@ class TranscriptionDB:
         # It must stay UTC, like CURRENT_TIMESTAMP: a local-time cutoff would
         # silently prune the wrong window by the UTC offset.
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
-        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+        with closing(self._connect()) as conn, conn:
             rows = conn.execute(
                 "SELECT id, audio_path FROM transcriptions WHERE audio_path IS NOT NULL AND created_at < ?",
                 (cutoff,),

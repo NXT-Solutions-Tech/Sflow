@@ -15,6 +15,7 @@ import subprocess
 from groq import Groq
 from config import LLM_CLEANUP_MODEL
 from core.logger import log
+from core.token_budget import max_tokens_for
 
 
 _COMMAND_SYSTEM = """Eres un asistente que transforma texto según instrucciones del usuario.
@@ -136,7 +137,9 @@ class CommandModeHandler:
                     {"role": "user", "content": user_msg},
                 ],
                 temperature=0.4,
-                max_tokens=2000,
+                # Escala con la instruccion+seleccion para no truncar respuestas
+                # largas; nunca por debajo del minimo historico.
+                max_tokens=max_tokens_for(user_msg, floor=2000),
             )
             result = (completion.choices[0].message.content or "").strip()
             if result.startswith("```") and result.endswith("```"):

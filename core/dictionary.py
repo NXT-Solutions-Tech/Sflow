@@ -39,7 +39,12 @@ def _is_substitution(line: str) -> bool:
 def _ensure_file():
     if not os.path.exists(DICTIONARY_PATH):
         os.makedirs(os.path.dirname(DICTIONARY_PATH), exist_ok=True)
-        with open(DICTIONARY_PATH, "w") as f:
+        # 0600 from the first byte: the dictionary can hold personal names and
+        # text substitutions, and the default 0644 would expose them to every
+        # other user on the machine. os.open's mode applies only on create, so
+        # this never touches a file the user already owns differently.
+        fd = os.open(DICTIONARY_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
             f.write(_DEFAULT_SEED)
 
 

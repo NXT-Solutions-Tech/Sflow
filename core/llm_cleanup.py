@@ -15,6 +15,7 @@ import config
 from config import LLM_CLEANUP_MODEL, get_setting
 from core.logger import log as _log
 from core.secrets import get_key
+from core.token_budget import max_tokens_for
 
 
 _BASE_RULES = """Eres un corrector MINIMO de transcripciones de voz. Tu trabajo es PRESERVAR la transcripcion casi intacta, solo haciendo los cambios ESTRICTAMENTE necesarios.
@@ -144,7 +145,9 @@ class LLMCleanup:
                 {"role": "user", "content": text},
             ],
             temperature=0.0,  # determinista: 0 randomness para evitar alucinaciones
-            max_tokens=1500,
+            # Escala con la entrada: un dictado de 5+ min excede 1500 y se cortaba
+            # a media frase EN SILENCIO. floor=1500 conserva el minimo historico.
+            max_tokens=max_tokens_for(text, floor=1500),
         )
         return completion.choices[0].message.content or ""
 
@@ -171,7 +174,7 @@ class LLMCleanup:
                     {"role": "user", "content": text},
                 ],
                 "temperature": 0.0,
-                "max_tokens": 1500,
+                "max_tokens": max_tokens_for(text, floor=1500),
                 # GLM (y otros modelos de razonamiento) gastarian todo el presupuesto
                 # de tokens "pensando" y devolverian content vacio. Para limpieza de
                 # dictado no queremos reasoning: lo apagamos para que escriba directo.

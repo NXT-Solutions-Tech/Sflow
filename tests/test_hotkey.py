@@ -46,6 +46,27 @@ def test_ctrl_shift_hold_is_command_mode(hk):
     assert "pressed" not in hk._events            # never confused with regular
 
 
+def test_force_reset_clears_recording_state(hk):
+    """The controller calls force_reset() when it force-stops a recording
+    out-of-band (the hands-free cap). Every in-progress flag must clear so the
+    next press starts fresh instead of being swallowed."""
+    hk._recording = True
+    hk._hands_free = True
+    hk._command_mode = True
+    hk._ctrl_tap_count = 1
+
+    hk.force_reset()
+
+    assert hk._recording is False
+    assert hk._hands_free is False
+    assert hk._command_mode is False
+    assert hk._ctrl_tap_count == 0
+    # A fresh Ctrl+Alt hold works again after a reset.
+    hk._on_press(K.ctrl_l)
+    hk._on_press(K.alt_l)
+    assert "pressed" in hk._events
+
+
 def test_command_mode_off_by_default(hk):
     # It uploads audio + the current selection to the cloud → must be opt-in.
     assert config.get_setting("command_mode_enabled") is False

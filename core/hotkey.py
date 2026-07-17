@@ -21,11 +21,22 @@ from config import DOUBLE_TAP_INTERVAL, CTRL_TAP_MAX_DURATION, get_setting, APP_
 # Debug log file — always writes (tiny footprint) so we can diagnose hotkey
 # issues from a packaged .app without stdout visibility.
 _LOG_PATH = os.path.join(APP_DATA_DIR, "hotkey.log")
+_MAX_BYTES = 1_000_000  # rotate at ~1 MB, like core/logger.py — never unbounded
+
+
+def _rotate_if_needed():
+    try:
+        if os.path.getsize(_LOG_PATH) > _MAX_BYTES:
+            # Keep one previous generation (hotkey.log.1), overwrite older.
+            os.replace(_LOG_PATH, _LOG_PATH + ".1")
+    except OSError:
+        pass
 
 
 def _log(msg: str):
     try:
         ts = datetime.datetime.now().isoformat(timespec="seconds")
+        _rotate_if_needed()
         with open(_LOG_PATH, "a") as f:
             f.write(f"[{ts}] {msg}\n")
     except Exception:
@@ -95,6 +106,18 @@ class HotkeyListener(QObject):
         if self._mouse_listener:
             self._mouse_listener.stop()
             self._mouse_listener = None
+
+    def force_reset(self):
+        """Clear all in-progress recording state without emitting anything.
+
+        The controller calls this when it force-stops a recording out-of-band —
+        e.g. the hands-free time cap fired — so the NEXT hotkey starts from a
+        clean slate instead of a listener still convinced it's recording (which
+        would swallow the next press)."""
+        self._recording = False
+        self._hands_free = False
+        self._command_mode = False
+        self._ctrl_tap_count = 0
 
     # --- Mouse ---
     def _on_click(self, x, y, button, pressed):

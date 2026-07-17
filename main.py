@@ -19,7 +19,7 @@ import multiprocessing
 # salir antes de llegar a main(). Debe ser lo PRIMERO que corre.
 multiprocessing.freeze_support()
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PyQt6.QtCore import Qt, QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, QObject, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QIcon, QPixmap, QAction
 
 from ui.pill_widget import PillWidget
@@ -35,11 +35,11 @@ from core.command_mode import CommandModeHandler, copy_selection
 from core.transform import TransformHandler
 from core.relaunch import relaunch_app
 from core.logger import log, log_exc
-from core import error_messages, onboarding, permissions
+from core import error_messages, onboarding, permissions, sounds
 from core.secrets import get_key
 from db.database import TranscriptionDB
 from config import (
-    LOGO_PATH, AUDIO_DIR, get_setting, set_setting, get_stt_model,
+    LOGO_PATH, AUDIO_DIR, RECORDING_CAP_SECONDS, get_setting, set_setting, get_stt_model,
 )
 from ui import theme
 
@@ -244,6 +244,13 @@ class SFlowApp(QObject):
         self._last_notify_code = ""
         self._last_notify_ts = 0.0
 
+        # Hands-free runs unattended until a second Ctrl tap. Cap it: this
+        # single-shot timer is armed when hands-free starts and disarmed when it
+        # stops normally; if it fires, we auto-stop and toast.
+        self._cap_timer = QTimer(self)
+        self._cap_timer.setSingleShot(True)
+        self._cap_timer.timeout.connect(self._on_recording_cap)
+
         self.pill.visualizer.set_audio_queue(self.recorder.audio_queue)
 
         # Signals — all QueuedConnection (pynput emits from its own thread)
@@ -252,6 +259,9 @@ class SFlowApp(QObject):
         self.hotkey.transform_triggered.connect(self._on_transform, Qt.ConnectionType.QueuedConnection)
         self.hotkey.hands_free_started.connect(self.red_dot.start, Qt.ConnectionType.QueuedConnection)
         self.hotkey.hands_free_stopped.connect(self.red_dot.stop, Qt.ConnectionType.QueuedConnection)
+        # Arm/disarm the recording cap alongside the red-dot lifecycle.
+        self.hotkey.hands_free_started.connect(self._arm_cap, Qt.ConnectionType.QueuedConnection)
+        self.hotkey.hands_free_stopped.connect(self._disarm_cap, Qt.ConnectionType.QueuedConnection)
         # Command Mode (Ctrl+Shift hold) + Cmd+Shift+H (Hub) + Cmd+Ctrl+V (paste last)
         self.hotkey.command_pressed.connect(self._on_command_pressed, Qt.ConnectionType.QueuedConnection)
         self.hotkey.command_released.connect(self._on_command_released, Qt.ConnectionType.QueuedConnection)
@@ -343,6 +353,7 @@ class SFlowApp(QObject):
             except Exception:
                 self._dictation_app = None
             self.recorder.start()
+            sounds.play_start()
             self.pill.set_state(PillWidget.STATE_RECORDING)
         except Exception as e:
             log_exc("hotkey_pressed crashed (suppressed)", e)
@@ -356,6 +367,7 @@ class SFlowApp(QObject):
         # Bound outside the try: if anything below throws once the WAV is on disk,
         # the handler still has to discard it or it outlives every reference.
         audio_path = None
+        self._cap_timer.stop()  # a normal stop disarms the hands-free cap
         try:
             duration = self.recorder.stop()
             self.pill.set_state(PillWidget.STATE_PROCESSING)
@@ -452,6 +464,7 @@ class SFlowApp(QObject):
                 perform_actions(actions)
             except Exception as e:
                 log_exc("dictation actions failed", e)
+        sounds.play_done()  # only on a landed paste — never over a failure
         self.pill.set_state(
             PillWidget.STATE_DONE_CLOUD if _was_cloud_fallback(model_id) else PillWidget.STATE_DONE
         )
@@ -506,6 +519,29 @@ class SFlowApp(QObject):
         log(f"ERROR state: {toast.code}", level="ERROR")
         self.pill.set_state(PillWidget.STATE_ERROR)
         self.notify(toast)
+
+    # ------- Hands-free recording cap -------
+    @pyqtSlot()
+    def _arm_cap(self):
+        self._cap_timer.start(int(RECORDING_CAP_SECONDS * 1000))
+
+    @pyqtSlot()
+    def _disarm_cap(self):
+        self._cap_timer.stop()
+
+    @pyqtSlot()
+    def _on_recording_cap(self):
+        """Fired when hands-free ran past RECORDING_CAP_SECONDS. Stop cleanly,
+        reset the listener (so the next Ctrl tap starts fresh), toast, and route
+        through the normal release so what WAS captured still gets transcribed."""
+        log(f"hands-free recording cap ({RECORDING_CAP_SECONDS}s) hit — auto-stopping", "WARN")
+        try:
+            self.red_dot.stop()
+        except Exception:
+            pass
+        self.hotkey.force_reset()
+        self.notify(error_messages.message_for(error_messages.CODE_RECORDING_CAPPED))
+        self._on_hotkey_released()
 
     # ------- Command Mode flow -------
     @pyqtSlot()
@@ -683,6 +719,11 @@ def main():
         sflow.hub.activateWindow()
 
     sflow.set_tray(_setup_tray(app, open_hub))
+
+    # The DB may have quarantined a corrupt history at construction (before the
+    # tray existed to toast it). Surface it now that the tray is up.
+    if getattr(sflow.db, "recovered_from_corruption", False):
+        sflow.notify(error_messages.message_for(error_messages.CODE_DB_CORRUPT))
 
     sys.exit(app.exec())
 

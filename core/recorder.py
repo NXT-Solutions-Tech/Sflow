@@ -5,6 +5,7 @@ import time
 import numpy as np
 import sounddevice as sd
 from config import SAMPLE_RATE, CHANNELS, AUDIO_DTYPE, BLOCK_SIZE, get_setting
+from core.logger import log
 
 
 def list_input_devices() -> list[dict]:
@@ -38,12 +39,33 @@ class AudioRecorder:
         self.stream: sd.InputStream | None = None
         self.is_recording = False
         self._start_time = 0.0
+        # Set by the audio callback when PortAudio reports an error status
+        # (overflow/underflow/etc). Reset on each start(); surfaced so the next
+        # start() knows to open a clean stream rather than reuse a wedged one.
+        self.stream_error = False
+        self._last_status = None
 
     def _callback(self, indata: np.ndarray, frames: int, time_info, status):
         if status:
-            print(f"Audio status: {status}")
+            self._note_status(status)
         self.audio_queue.put(indata.copy())
         self.frames.append(indata.copy())
+
+    def _note_status(self, status):
+        # Log once per distinct status within a recording — over/underflows can
+        # fire every block and would otherwise flood the log.
+        self.stream_error = True
+        s = str(status)
+        if s != self._last_status:
+            self._last_status = s
+            log(f"audio stream status: {s}", "WARN")
+
+    def elapsed(self) -> float:
+        """Wall-clock seconds since start(), or 0 if not recording. Drives the
+        hands-free recording cap in the controller."""
+        if not self.is_recording or not self._start_time:
+            return 0.0
+        return time.time() - self._start_time
 
     def start(self):
         self.frames.clear()
@@ -53,6 +75,17 @@ class AudioRecorder:
                 self.audio_queue.get_nowait()
             except queue.Empty:
                 break
+        # A previous stop() that raised could leave a stream dangling; close it
+        # before opening a new one so PortAudio streams never stack up.
+        if self.stream is not None:
+            try:
+                self.stream.stop()
+                self.stream.close()
+            except Exception:
+                pass
+            self.stream = None
+        self.stream_error = False
+        self._last_status = None
         self.is_recording = True
         self._start_time = time.time()
 
@@ -80,13 +113,22 @@ class AudioRecorder:
                 raise
 
     def stop(self) -> float:
-        """Stop recording and return duration in seconds."""
+        """Stop recording and return duration in seconds.
+
+        Guarded end to end: a PortAudio error in stop()/close() must not leave
+        the stream dangling (start() would then stack a second one) nor propagate
+        into the release handler that computes duration and kicks off transcription.
+        The stream reference is cleared FIRST so a failing close() can't strand it."""
         self.is_recording = False
-        duration = time.time() - self._start_time
-        if self.stream:
-            self.stream.stop()
-            self.stream.close()
-            self.stream = None
+        duration = time.time() - self._start_time if self._start_time else 0.0
+        stream, self.stream = self.stream, None
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception as e:
+                log(f"recorder.stop failed ({e})", "ERROR")
+                self.stream_error = True
         return duration
 
     def get_wav_buffer(self) -> io.BytesIO:

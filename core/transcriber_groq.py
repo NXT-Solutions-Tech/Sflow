@@ -32,6 +32,17 @@ def _is_hallucination(text: str) -> bool:
     return any(marker in lowered for marker in _HALLUCINATION_MARKERS)
 
 
+def _stt_timeout(num_bytes: int, base: float = 10.0, cap: float = 60.0) -> float:
+    """Request timeout scaled to the WAV upload size.
+
+    16kHz mono 16-bit is ~32KB/s, so a 5-minute dictation is ~9.6MB. On a slow
+    uplink that can't finish in the flat 10s the client used to pin, and the
+    dictation was lost. Add ~1s per 100KB over the base, capped so a pathological
+    file can't hang the worker forever.
+    """
+    return min(cap, base + max(0, num_bytes) / 100_000)
+
+
 class GroqTranscriber:
     """Cloud transcription via Groq Whisper Large v3 Turbo."""
 
@@ -56,6 +67,9 @@ class GroqTranscriber:
             model=GROQ_MODEL,
             response_format="text",
             temperature=0.0,
+            # Per-request override of the client's 10s default: a long dictation on
+            # a slow uplink needs proportionally longer or it's dropped.
+            timeout=_stt_timeout(len(data)),
         )
         lang = get_stt_language()
         if lang:  # None = autodeteccion → omitir el parametro
