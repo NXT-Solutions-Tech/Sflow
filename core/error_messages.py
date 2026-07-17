@@ -27,12 +27,14 @@ CODE_PASTE_FAILED = "paste_failed"
 CODE_NO_SELECTION = "no_selection"
 CODE_DB_CORRUPT = "db_corrupt"
 CODE_RECORDING_CAPPED = "recording_capped"
+CODE_MODEL_MISSING = "model_missing"
 CODE_UNKNOWN = "unknown"
 
 CODES = (
     CODE_SILENCE, CODE_HALLUCINATION, CODE_NO_KEY, CODE_AUTH, CODE_RATE_LIMIT,
     CODE_OFFLINE, CODE_TIMEOUT, CODE_SERVER, CODE_PERMISSION, CODE_PASTE_FAILED,
-    CODE_NO_SELECTION, CODE_DB_CORRUPT, CODE_RECORDING_CAPPED, CODE_UNKNOWN,
+    CODE_NO_SELECTION, CODE_DB_CORRUPT, CODE_RECORDING_CAPPED, CODE_MODEL_MISSING,
+    CODE_UNKNOWN,
 )
 
 
@@ -95,6 +97,10 @@ _MESSAGES = {
         CODE_RECORDING_CAPPED, "Grabación detenida",
         "Manos libres se detuvo sola al llegar al límite de tiempo. Tu dictado se está procesando.",
     ),
+    CODE_MODEL_MISSING: Toast(
+        CODE_MODEL_MISSING, "Modelo no descargado",
+        "Este modelo local aún no está en tu Mac. Descárgalo en Ajustes → Modelo.",
+    ),
     CODE_UNKNOWN: Toast(
         CODE_UNKNOWN, "Algo falló",
         "No se pudo completar el dictado. Revisa sflow.log si se repite.",
@@ -103,6 +109,7 @@ _MESSAGES = {
 
 # Groq SDK class names → code. Matched by name so the SDK stays unimported.
 _EXCEPTION_NAMES = {
+    "ModelNotDownloaded": CODE_MODEL_MISSING,
     "AuthenticationError": CODE_AUTH,
     "PermissionDeniedError": CODE_AUTH,
     "RateLimitError": CODE_RATE_LIMIT,

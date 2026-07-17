@@ -2,15 +2,19 @@
 and post-processing pipeline order. Uses a fake backend — no MLX, no network."""
 import io
 
-from core.transcriber import Transcriber
+from core.transcriber import Transcriber, _PARAKEET_REPO
 
 
 class FakeBackend:
-    def __init__(self, available=True, text="hola", model_id="fake"):
+    def __init__(self, available=True, text="hola", model_id="fake", downloaded=True):
         self.available = available
+        self._downloaded = downloaded
         self._text = text
         self.model_id = model_id
         self.calls = 0
+
+    def is_downloaded(self):
+        return self._downloaded
 
     def transcribe(self, buf, vocabulary_prompt=""):
         self.calls += 1
@@ -22,9 +26,12 @@ def _model(engine="whisper", model="m", _id="x"):
 
 
 def test_resolve_falls_back_to_groq_when_local_unavailable(monkeypatch):
+    """Local-first (F2 step 3): Groq is the LAST resort — reached only when the
+    selected engine AND the bundled Parakeet are both unavailable."""
     t = Transcriber()
     monkeypatch.setattr("core.transcriber.get_stt_model", lambda: _model())
     t._backends["whisper|m"] = FakeBackend(available=False)
+    t._backends[f"parakeet|{_PARAKEET_REPO}"] = FakeBackend(available=False)
     _, engine = t._resolve()
     assert engine == "groq"
 

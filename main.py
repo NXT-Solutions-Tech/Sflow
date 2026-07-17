@@ -107,7 +107,21 @@ def _run_onboarding_if_needed():
     # there, which is where the app itself puts it.
     key_present = bool(get_key("GROQ_API_KEY"))
 
-    steps = onboarding.plan_steps(perms, key_required, key_present)
+    # Offer the optional Whisper-Turbo download on first run only, and only if the
+    # active local model isn't already present. Never on the permission-rescue
+    # path — a revoked permission shouldn't turn into a download upsell.
+    offer_model = False
+    try:
+        first_run = (seen or 0) < onboarding.ONBOARDING_VERSION
+        active = get_stt_model()
+        if first_run and active.get("local"):
+            from core.models import ModelManager
+            offer_model = not ModelManager().is_available(active.get("model", ""))
+    except Exception:
+        offer_model = False
+
+    steps = onboarding.plan_steps(perms, key_required, key_present,
+                                  offer_model_download=offer_model)
     try:
         from ui.onboarding_wizard import OnboardingWizard
         OnboardingWizard(steps, key_required=key_required).exec()

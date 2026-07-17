@@ -10,6 +10,7 @@ from config import get_setting, get_stt_model
 from core.transcriber_groq import GroqTranscriber
 from core.transcriber_local import LocalTranscriber
 from core.transcriber_parakeet import ParakeetTranscriber
+from core.models import ModelNotDownloaded
 from core.llm_cleanup import LLMCleanup
 from core.smart_commands import apply as apply_smart_commands
 from core.dictionary import as_whisper_prompt
@@ -19,6 +20,14 @@ from core.substitutions import apply as apply_substitutions
 
 # Motores que aprovechan el hint de vocabulario (diccionario personal).
 _VOCAB_ENGINES = {"groq", "whisper"}
+
+# The always-on-device fallback: its weights ship inside the bundle.
+_PARAKEET_REPO = "mlx-community/parakeet-tdt-0.6b-v3"
+
+
+def _is_downloaded(backend) -> bool:
+    check = getattr(backend, "is_downloaded", None)
+    return check() if callable(check) else True
 
 
 class Transcriber:
@@ -47,16 +56,23 @@ class Transcriber:
             return b
 
     def _resolve(self):
-        """Devuelve (backend, engine) segun el modelo activo, con fallback a Groq
-        si el motor local no esta disponible en runtime (MLX no instalado)."""
+        """Devuelve (backend, engine) segun el modelo activo. Local-first: si el
+        motor elegido no esta disponible (MLX no instalado) O sus pesos no estan
+        descargados, cae al Parakeet BUNDLEADO (sigue local); Groq queda como
+        ultimo recurso (necesita key)."""
         m = get_stt_model()
         engine = m["engine"]
         if engine == "groq":
             return self._groq, "groq"
         backend = self._get_backend(engine, m["model"])
-        if getattr(backend, "available", True):
+        if getattr(backend, "available", True) and _is_downloaded(backend):
             return backend, engine
-        return self._groq, "groq"  # fallback silencioso
+        # Local-first fallback to the bundled Parakeet before ever touching the cloud.
+        if engine != "parakeet":
+            pk = self._get_backend("parakeet", _PARAKEET_REPO)
+            if getattr(pk, "available", True) and _is_downloaded(pk):
+                return pk, "parakeet"
+        return self._groq, "groq"  # last resort — cloud, needs a key
 
     def _pick_backend(self):
         return self._resolve()[0]
@@ -82,6 +98,11 @@ class Transcriber:
 
         try:
             raw = backend.transcribe(wav_buffer, vocabulary_prompt=vocab)
+        except ModelNotDownloaded:
+            # Honest: the weights vanished mid-run (a rare race — _resolve only
+            # returns a downloaded backend). Surface "download it in Ajustes",
+            # never a false Groq/no-key error.
+            raise
         except Exception as e:
             # A local engine can fail at RUNTIME even when importable — e.g. the
             # one-time Hugging Face model download drops mid-way. `_resolve`'s

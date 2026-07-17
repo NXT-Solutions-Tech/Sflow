@@ -22,6 +22,10 @@ from config import (
 )
 from core.recorder import list_input_devices
 from core.secrets import set_key, key_source
+from core.models import ModelManager, missing_code_for_selection
+from core import error_messages
+
+_STT_BY_ID = {m["id"]: m for m in STT_MODELS}
 import os
 import subprocess
 
@@ -736,6 +740,20 @@ class SettingsPage(QWidget):
         self.model_combo.setCurrentIndex(max(0, self.model_combo.findData(get_setting("stt_model", "whisper-turbo-local"))))
         tl.addWidget(self.model_combo)
 
+        # Download affordance: local models that ship as an on-demand download
+        # (Whisper Turbo) show a "Descargar" button + status when not present. The
+        # bundled Parakeet and cloud Groq never need it. See _refresh_model_dl().
+        dlrow = QHBoxLayout()
+        self.model_dl_status = dim("")
+        dlrow.addWidget(self.model_dl_status)
+        dlrow.addStretch()
+        self.model_dl_btn = secondary_button("Descargar")
+        self.model_dl_btn.clicked.connect(self._download_selected_model)
+        dlrow.addWidget(self.model_dl_btn)
+        tl.addLayout(dlrow)
+        self.model_combo.currentIndexChanged.connect(lambda _i: self._refresh_model_dl())
+        self._refresh_model_dl()
+
         tl.addWidget(dim("Idioma del dictado"))
         self.lang_combo = QComboBox()
         self.lang_combo.addItem("Auto — detecta ES/EN automáticamente", "auto")
@@ -909,7 +927,49 @@ class SettingsPage(QWidget):
         if confirm == QMessageBox.StandardButton.Yes:
             relaunch_app()
 
+    def _model_manager(self) -> ModelManager:
+        if getattr(self, "_mm", None) is None:
+            self._mm = ModelManager()
+        return self._mm
+
+    def _selected_model(self) -> dict:
+        return _STT_BY_ID.get(self.model_combo.currentData(), {})
+
+    def _refresh_model_dl(self):
+        """Show the Descargar button + status only for a local model whose weights
+        aren't present. Cloud (Groq) and the bundled Parakeet never show it."""
+        model = self._selected_model()
+        code = missing_code_for_selection(model, self._model_manager())
+        missing = code is not None
+        self.model_dl_btn.setVisible(missing)
+        if missing:
+            self.model_dl_status.setText("No descargado — necesario para dictar offline con este modelo.")
+        elif model.get("local"):
+            self.model_dl_status.setText("Descargado ✓ · listo para dictar offline.")
+        else:
+            self.model_dl_status.setText("")
+
+    def _download_selected_model(self):
+        model = self._selected_model()
+        repo = model.get("model")
+        if not repo:
+            return
+        from ui.model_download import ModelDownloadDialog
+        dlg = ModelDownloadDialog(repo, self._model_manager(), self)
+        dlg.exec()
+        self._refresh_model_dl()
+
     def _save(self):
+        # Honest gate: activating a local model whose weights aren't downloaded
+        # surfaces CODE_MODEL_MISSING (download it), NEVER a key error — the key
+        # has nothing to do with an on-device model.
+        code = missing_code_for_selection(self._selected_model(), self._model_manager())
+        if code is not None:
+            toast = error_messages.message_for(code)
+            QMessageBox.information(self, toast.title, toast.body)
+            self._download_selected_model()
+            if missing_code_for_selection(self._selected_model(), self._model_manager()) is not None:
+                return  # still not downloaded — don't persist an unusable selection
         set_setting("stt_model", self.model_combo.currentData())
         set_setting("stt_language", self.lang_combo.currentData())
         set_setting("input_device", self.mic_combo.currentData())

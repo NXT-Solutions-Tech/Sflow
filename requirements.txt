@@ -20,3 +20,7 @@ pyobjc-framework-ApplicationServices>=10.0
 # (mejor precision) · parakeet v3 ~280ms (mas rapido). Ambos seleccionables en Ajustes.
 mlx-whisper>=0.4.0
 parakeet-mlx>=0.3.0
+# Model weight management (ModelManager: availability check + on-demand download
+# with progress). Already a transitive dep of mlx-whisper; pinned here because
+# core/models.py imports it directly (snapshot_download).
+huggingface_hub>=0.24.0

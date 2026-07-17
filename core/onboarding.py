@@ -22,6 +22,7 @@ STEP_MIC = "mic"
 STEP_ACCESSIBILITY = "accessibility"
 STEP_INPUT_MONITORING = "input_monitoring"
 STEP_API_KEY = "api_key"
+STEP_MODEL = "model"
 
 
 def api_key_required(model_local: bool, cleanup_level: str) -> bool:
@@ -47,12 +48,17 @@ def validate_api_key(raw: str) -> tuple[bool, str]:
     return True, ""
 
 
-def plan_steps(perms: dict, key_required: bool, key_present: bool) -> list[str]:
+def plan_steps(perms: dict, key_required: bool, key_present: bool,
+               offer_model_download: bool = False) -> list[str]:
     """The steps to walk, given what's already granted.
 
     A permission reading ``None`` (probe unavailable) keeps its step: unknown is
     never treated as granted, because the cost of asking twice is a mild
     annoyance while the cost of skipping is a hotkey that never fires.
+
+    ``offer_model_download`` appends the optional model step (an upsell to
+    download Whisper Turbo). It's off by default so the permission-rescue flow —
+    which reuses this same function — never turns into a download prompt.
     """
     steps = [STEP_WELCOME, STEP_MIC]  # mic always — it doubles as the "it works" moment
     if perms.get(permissions.PERM_ACCESSIBILITY) is not True:
@@ -61,6 +67,8 @@ def plan_steps(perms: dict, key_required: bool, key_present: bool) -> list[str]:
         steps.append(STEP_INPUT_MONITORING)
     if key_required and not key_present:
         steps.append(STEP_API_KEY)
+    if offer_model_download:
+        steps.append(STEP_MODEL)
     return steps
 
 

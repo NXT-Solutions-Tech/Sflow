@@ -10,17 +10,22 @@ import io
 import tempfile
 import os
 from config import LOCAL_MODEL_ID, get_stt_language
+from core.models import ModelManager, ModelNotDownloaded
 
 
 class LocalTranscriber:
-    """mlx-whisper backend. Lazy-loads model + first-run downloads from HF.
+    """mlx-whisper backend. Lazy-loads the model from a LOCAL path only.
 
     model_id es parametrizable (whisper-large-v3-turbo por defecto) para que el
-    router pueda ofrecer distintos tamanos de Whisper desde Ajustes.
+    router pueda ofrecer distintos tamanos de Whisper desde Ajustes. It never
+    downloads implicitly: the weights come from the ModelManager (bundle or HF
+    cache), and a missing model raises ModelNotDownloaded so the UI can offer the
+    download instead of the pill hanging on a silent 1.6GB fetch.
     """
 
-    def __init__(self, model_id: str = LOCAL_MODEL_ID):
+    def __init__(self, model_id: str = LOCAL_MODEL_ID, manager: ModelManager | None = None):
         self._model_id = model_id
+        self._manager = manager or ModelManager()
         self._tried_import = False
         self._import_error: str | None = None
 
@@ -36,16 +41,28 @@ class LocalTranscriber:
                 return False
         return self._import_error is None
 
+    def is_downloaded(self) -> bool:
+        return self._manager.is_available(self._model_id)
+
+    def _weights_path(self) -> str:
+        """Local path to the weights, or raise ModelNotDownloaded — never a
+        repo id, so mlx-whisper can't kick off a silent download."""
+        p = self._manager.resolve_path(self._model_id)
+        if not p:
+            raise ModelNotDownloaded(self._model_id)
+        return p
+
     def warm(self):
-        """Precarga el modelo en un audio de silencio para dejarlo residente."""
-        if not self.available:
+        """Precarga el modelo en un audio de silencio para dejarlo residente.
+        No-op if the weights aren't downloaded — warming must not trigger a fetch."""
+        if not self.available or not self.is_downloaded():
             return
         import mlx_whisper
         import numpy as np
         try:
             mlx_whisper.transcribe(
                 np.zeros(1600, dtype=np.float32),  # 0.1s de silencio
-                path_or_hf_repo=self._model_id,
+                path_or_hf_repo=self._weights_path(),
                 language=get_stt_language(),
                 temperature=0.0,
             )
@@ -55,6 +72,8 @@ class LocalTranscriber:
     def transcribe(self, wav_buffer: io.BytesIO, vocabulary_prompt: str = "") -> str:
         if not self.available:
             raise RuntimeError(f"mlx-whisper not available: {self._import_error}")
+
+        path = self._weights_path()  # raises ModelNotDownloaded if missing
 
         import mlx_whisper
 
@@ -70,7 +89,7 @@ class LocalTranscriber:
 
         try:
             kwargs = {
-                "path_or_hf_repo": self._model_id,
+                "path_or_hf_repo": path,
                 "language": get_stt_language(),  # None = autodeteccion
                 "temperature": 0.0,
             }

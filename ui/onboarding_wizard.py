@@ -28,7 +28,8 @@ from PyQt6.QtWidgets import (
 from config import APP_DATA_DIR, LOGO_PATH
 from core import onboarding, permissions
 from core.onboarding import (
-    STEP_ACCESSIBILITY, STEP_API_KEY, STEP_INPUT_MONITORING, STEP_MIC, STEP_WELCOME,
+    STEP_ACCESSIBILITY, STEP_API_KEY, STEP_INPUT_MONITORING, STEP_MIC, STEP_MODEL,
+    STEP_WELCOME,
 )
 from ui import icons, theme
 from ui.audio_visualizer import AudioVisualizer
@@ -380,6 +381,62 @@ class ApiKeyStep(WizardStep):
         return True
 
 
+class ModelStep(WizardStep):
+    """Optional upsell: Parakeet ships bundled, Whisper Turbo is a 1.6GB download
+    for better accuracy. Always skippable — the default already works offline."""
+
+    step_id = STEP_MODEL
+
+    _WHISPER_REPO = "mlx-community/whisper-large-v3-turbo"
+
+    def __init__(self):
+        super().__init__()
+        self.header(
+            "sparkles", "Mejor precisión (opcional)",
+            "Parakeet ya viene incluido y funciona offline. Whisper Turbo acierta más "
+            "en nombres y jerga; es una descarga única de ~1.6 GB que puedes hacer ahora "
+            "o después desde Ajustes → Modelo.",
+        )
+        self._btn = primary_button("Descargar Whisper Turbo (1.6 GB)")
+        self._btn.clicked.connect(self._download)
+        self.root.addWidget(self._btn)
+        self.status = _StatusLine()
+        self.root.addWidget(self.status)
+        self.root.addStretch()
+
+    def on_enter(self):
+        if ManagerCache.manager().is_available(self._WHISPER_REPO):
+            self._btn.setEnabled(False)
+            self.status.set_granted("Ya descargado ✓")
+
+    def _download(self):
+        from ui.model_download import ModelDownloadDialog
+        dlg = ModelDownloadDialog(self._WHISPER_REPO, ManagerCache.manager(), self)
+        dlg.exec()
+        if ManagerCache.manager().is_available(self._WHISPER_REPO):
+            self._btn.setEnabled(False)
+            self.status.set_granted("Descargado ✓")
+
+    def skip_label(self) -> str | None:
+        return "Después"  # always optional — the bundled engine already works
+
+    def can_continue(self) -> bool:
+        return True
+
+
+class ManagerCache:
+    """One ModelManager for the wizard's model step (avoids re-instantiating on
+    every render)."""
+    _mm = None
+
+    @classmethod
+    def manager(cls):
+        if cls._mm is None:
+            from core.models import ModelManager
+            cls._mm = ModelManager()
+        return cls._mm
+
+
 class _StepDots(QWidget):
     """Progress dots. Painted rather than styled — QSS can't do this."""
 
@@ -455,6 +512,8 @@ class OnboardingWizard(QDialog):
             return InputMonitoringStep()
         if step_id == STEP_API_KEY:
             return ApiKeyStep(key_required=key_required)
+        if step_id == STEP_MODEL:
+            return ModelStep()
         return WelcomeStep()
 
     @property
