@@ -49,6 +49,18 @@ def _stub_natives():
     QMessageBox.warning = staticmethod(lambda *a, **k: QMessageBox.StandardButton.Ok)
     QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
 
+    # The wizard's side effects are already gated behind showEvent, so a grab()
+    # can't trigger them. Neutralize the probes anyway: rendering a preview must
+    # never prompt for TCC or open System Settings on the developer's machine.
+    from core import permissions
+    permissions.accessibility_granted = lambda prompt=False: False
+    permissions.input_monitoring_granted = lambda: False
+    permissions.request_input_monitoring = lambda: False
+    permissions.open_privacy_pane = lambda perm: False
+    from core import recorder
+    recorder.AudioRecorder.start = lambda self: None
+    recorder.AudioRecorder.stop = lambda self: 0.0
+
 
 def _temp_db():
     from db.database import TranscriptionDB
@@ -146,12 +158,23 @@ def build_surfaces(scheme):
         except Exception as e:
             print(f"  (skip {nm}: {e})")
 
-    # FirstRunDialog
+    # Onboarding wizard — one grab per step, since each is a distinct surface.
+    from core.onboarding import (
+        STEP_ACCESSIBILITY, STEP_API_KEY, STEP_INPUT_MONITORING, STEP_MIC, STEP_WELCOME,
+    )
+    from ui.onboarding_wizard import OnboardingWizard
+    for sid in (STEP_WELCOME, STEP_MIC, STEP_ACCESSIBILITY, STEP_INPUT_MONITORING, STEP_API_KEY):
+        try:
+            surfaces.append((f"wizard_{sid}", OnboardingWizard([sid])))
+        except Exception as e:  # pragma: no cover
+            print(f"  (skip wizard_{sid}: {e})")
+    # The key step renders differently when a cloud model makes the key mandatory
+    # (no "Continuar sin conexión" escape hatch).
     try:
-        frd = sflow_main.FirstRunDialog()
-        surfaces.append(("first_run", frd))
+        surfaces.append(("wizard_api_key_required",
+                         OnboardingWizard([STEP_API_KEY], key_required=True)))
     except Exception as e:  # pragma: no cover
-        print(f"  (skip FirstRunDialog: {e})")
+        print(f"  (skip wizard_api_key_required: {e})")
 
     # Pill (idle) + RedDot
     try:

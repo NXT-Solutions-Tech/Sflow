@@ -54,6 +54,10 @@ LUCIDE = {
     "pencil": "pencil",
     "retry": "rotate-ccw",
     "plus": "plus",
+    "mic": "mic",
+    "shield": "shield-check",
+    "shield-check": "shield-check",
+    "key": "key-round",
 }
 
 _SVG_CACHE: dict[str, str] = {}
