@@ -8,6 +8,10 @@ python-dotenv>=1.0.0
 keyring>=24.0.0
 pyobjc-framework-Cocoa>=10.0
 pyobjc-framework-Quartz>=10.0
+# Accessibility probe (AXIsProcessTrusted). Pulled in transitively by Quartz
+# today, but core/permissions.py imports it directly — pin it so a future pyobjc
+# reshuffle can't drop the edge and silently break the permission check.
+pyobjc-framework-ApplicationServices>=10.0
 
 # --- Local offline transcription (Apple Silicon / Apple MLX) ---
 # Se BUNDLEAN en el .app (ver sflow.spec) para que los modelos locales funcionen

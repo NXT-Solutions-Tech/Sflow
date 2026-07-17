@@ -104,6 +104,12 @@ a = Analysis(
         'core.secrets',
         'core.substitutions',
         'core.transcriber_parakeet',
+        'core.permissions',
+        'core.onboarding',
+        'core.error_messages',
+        'ui.onboarding_wizard',
+        'ui.components',
+        'ui.icons',
         # Local STT stack (auto-descubierto por collect_all arriba)
         *mlx_hidden,
     ],
