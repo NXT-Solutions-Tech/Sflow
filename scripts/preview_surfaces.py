@@ -122,6 +122,9 @@ def build_surfaces(scheme):
     _seed(db)
     hub = HubWindow(db)
     hub.resize(880, 620)
+    # Pages populate in reload() (driven by HubWindow.showEvent in the app); the
+    # composite grab never fires showEvent, so populate the visible page by hand.
+    hub.home_page.reload()
     surfaces.append(("hub", hub))
 
     # Individual Hub pages, built fresh & standalone (detached from the stack)

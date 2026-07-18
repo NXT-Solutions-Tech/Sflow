@@ -37,7 +37,10 @@ import subprocess
 # stylesheets become theme-aware for free.
 from ui.theme import C  # noqa: E402
 from ui import icons  # noqa: E402
-from ui.components import Switch, page_title, primary_button, secondary_button  # noqa: E402
+from ui.components import (  # noqa: E402
+    Switch, page_title, primary_button, secondary_button,
+    display_title, serif_label, StatCard, keycaps, Sparkline, EmptyState, elevate,
+)
 
 
 # ---------- Helpers ----------
@@ -154,15 +157,15 @@ class SidebarButton(QPushButton):
                 color: {C.TEXT};
             }}
             QPushButton:checked {{
-                background: {C.BG_CARD};
-                color: {C.TEXT};
+                background: {C.ACCENT_SUBTLE};
+                color: {C.ACCENT};
                 font-weight: 600;
             }}
         """)
         self.toggled.connect(self._retint)
 
     def _retint(self, checked: bool):
-        self.setIcon(icons.icon(self._icon_name, color=(C.TEXT if checked else C.TEXT_DIM), size=18))
+        self.setIcon(icons.icon(self._icon_name, color=(C.ACCENT if checked else C.TEXT_DIM), size=18))
 
 
 class TranscriptionCard(QFrame):
@@ -184,12 +187,12 @@ class TranscriptionCard(QFrame):
 
         self.setStyleSheet(f"""
             TranscriptionCard {{
-                background: {C.BG_CARD};
-                border-radius: 10px;
-                border: 1px solid {C.DIVIDER};
+                background: {C.BG_RAISED};
+                border-radius: 12px;
+                border: 1px solid {C.BORDER};
             }}
             TranscriptionCard:hover {{
-                border-color: {C.BG_HOVER};
+                border-color: {C.ACCENT};
             }}
         """)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -562,13 +565,14 @@ class SnippetsPage(QWidget):
         # New snippet form
         form = QFrame()
         form.setObjectName("card")
-        form.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 10px; }}")
+        form.setStyleSheet(f"#card {{ background: {C.BG_RAISED}; border: 1px solid {C.BORDER}; border-radius: 14px; }}")
+        elevate(form, "md")
         fl = QVBoxLayout(form)
-        fl.setContentsMargins(14, 12, 14, 12)
+        fl.setContentsMargins(18, 16, 18, 16)
         fl.setSpacing(8)
 
         lbl = QLabel("Agregar snippet")
-        lbl.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 11px; font-weight: 500;")
+        lbl.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; font-weight: 600; background: transparent;")
         fl.addWidget(lbl)
 
         self.trigger_input = QLineEdit()
@@ -603,7 +607,8 @@ class SnippetsPage(QWidget):
         root.addWidget(scroll, 1)
 
         self.setLayout(root)
-        self.reload()
+        # Populated by reload() on nav (HubWindow._go) / by the preview harness,
+        # not in __init__ — a double populate would ghost a second empty state.
 
     def _add(self):
         t = self.trigger_input.text().strip()
@@ -629,8 +634,11 @@ class SnippetsPage(QWidget):
 
         rows = self.db.list_all()
         if not rows:
-            empty = QLabel("No tienes snippets. Agrega uno arriba.")
-            empty.setStyleSheet(f"color: {C.TEXT_FAINT}; padding: 20px; text-align: center;")
+            empty = EmptyState(
+                "sparkles",
+                "No tienes snippets aún",
+                'Agrega uno arriba: di el trigger y SFlow pega la expansión.',
+            )
             self._list_layout.insertWidget(0, empty)
             return
 
@@ -641,7 +649,7 @@ class SnippetsPage(QWidget):
     def _snippet_card(self, s: dict) -> QFrame:
         f = QFrame()
         f.setObjectName("card")
-        f.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 8px; }}")
+        f.setStyleSheet(f"#card {{ background: {C.BG_RAISED}; border: 1px solid {C.BORDER}; border-radius: 12px; }}")
         lay = QVBoxLayout(f)
         lay.setContentsMargins(14, 10, 14, 10)
         lay.setSpacing(4)
@@ -723,18 +731,16 @@ class SettingsPage(QWidget):
         root.addWidget(tabs, 1)
 
         def group(name, target) -> QVBoxLayout:
-            g = QGroupBox(name)
-            g.setStyleSheet(f"""
-                QGroupBox {{
-                    color: {C.TEXT}; font-size: 13px; font-weight: 500;
-                    border: 1px solid {C.DIVIDER}; border-radius: 10px;
-                    padding-top: 20px; padding-bottom: 8px;
-                    margin-top: 8px; background: {C.BG_CARD};
+            # A settings section as an elevated card with a clean header on top —
+            # replaces the dated QGroupBox whose title notched into the border.
+            card = QFrame()
+            card.setObjectName("settingsCard")
+            card.setStyleSheet(f"""
+                #settingsCard {{
+                    background: {C.BG_RAISED};
+                    border: 1px solid {C.BORDER}; border-radius: 14px;
                 }}
-                QGroupBox::title {{
-                    left: 14px; top: 0px; padding: 0 6px;
-                }}
-                QCheckBox {{ color: {C.TEXT}; font-size: 13px; padding: 6px 0; }}
+                QCheckBox {{ color: {C.TEXT}; font-size: 13px; padding: 6px 0; background: transparent; }}
                 QCheckBox::indicator {{
                     width: 16px; height: 16px;
                     background: {C.BG_INPUT};
@@ -743,23 +749,36 @@ class SettingsPage(QWidget):
                 QCheckBox::indicator:checked {{
                     background: {C.ACCENT}; border-color: {C.ACCENT};
                 }}
-                QLabel {{ color: {C.TEXT_DIM}; font-size: 12px; }}
+                QLabel {{ color: {C.TEXT_DIM}; font-size: 12px; background: transparent; }}
                 QComboBox {{
                     background: {C.BG_INPUT}; color: {C.TEXT};
-                    border: 1px solid {C.DIVIDER}; border-radius: 6px;
-                    padding: 6px 10px; min-width: 200px; font-size: 13px;
+                    border: 1px solid {C.BORDER}; border-radius: 8px;
+                    padding: 7px 12px; min-width: 200px; font-size: 13px;
                 }}
+                QComboBox:hover {{ border-color: {C.ACCENT}; }}
+                QComboBox::drop-down {{ border: none; width: 22px; }}
                 QComboBox QAbstractItemView {{
                     background: {C.BG_CARD}; color: {C.TEXT};
-                    selection-background-color: {C.BG_HOVER};
-                    border: 1px solid {C.DIVIDER};
+                    selection-background-color: {C.ACCENT_SUBTLE};
+                    selection-color: {C.TEXT};
+                    border: 1px solid {C.BORDER}; border-radius: 8px; outline: none; padding: 4px;
                 }}
             """)
+            outer = QVBoxLayout(card)
+            outer.setContentsMargins(18, 16, 18, 16)
+            outer.setSpacing(10)
+            header = QLabel(name)
+            header.setStyleSheet(
+                f"color: {C.TEXT_DIM}; font-size: 12px; font-weight: 600;"
+                f" border: none; background: transparent;"
+            )
+            outer.addWidget(header)
             inner = QVBoxLayout()
-            inner.setContentsMargins(14, 8, 14, 10)
+            inner.setContentsMargins(0, 0, 0, 0)
             inner.setSpacing(6)
-            g.setLayout(inner)
-            target.addWidget(g)
+            outer.addLayout(inner)
+            elevate(card, "md")
+            target.addWidget(card)
             return inner
 
         def dim(text):
@@ -1108,31 +1127,20 @@ class InsightsPage(QWidget):
             elif item.layout() is not None:
                 InsightsPage._clear(item.layout())
 
-    def _stat_card(self, value: str, label: str) -> QFrame:
-        card = QFrame()
-        card.setObjectName("card")
-        card.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
-        cl = QVBoxLayout(card)
-        cl.setContentsMargins(16, 14, 16, 14)
-        cl.setSpacing(4)
-        v = QLabel(value)
-        v.setStyleSheet(f"color: {C.TEXT}; font-size: 26px; font-weight: 700;")
-        lb = QLabel(label)
-        lb.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
-        cl.addWidget(v)
-        cl.addWidget(lb)
-        return card
-
     def _section(self, name: str) -> QVBoxLayout:
         box = QFrame()
         box.setObjectName("card")
-        box.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
+        box.setStyleSheet(
+            f"#card {{ background: {C.BG_RAISED}; border: 1px solid {C.BORDER};"
+            f" border-radius: 14px; }}"
+        )
         inner = QVBoxLayout(box)
-        inner.setContentsMargins(16, 14, 16, 14)
-        inner.setSpacing(10)
+        inner.setContentsMargins(18, 16, 18, 16)
+        inner.setSpacing(12)
         header = QLabel(name)
-        header.setStyleSheet(f"color: {C.TEXT}; font-size: 14px; font-weight: 600; border: none;")
+        header.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; font-weight: 600; border: none; background: transparent;")
         inner.addWidget(header)
+        elevate(box, "md")
         self.body.addWidget(box)
         return inner
 
@@ -1141,52 +1149,51 @@ class InsightsPage(QWidget):
         d = self.db.insights()
 
         cards = QHBoxLayout()
-        cards.setSpacing(12)
-        cards.addWidget(self._stat_card(f"{d['words']:,}", "Palabras totales"))
-        cards.addWidget(self._stat_card(f"{round(d['wpm'])}", "Palabras / minuto"))
-        cards.addWidget(self._stat_card(f"{d['count']:,}", "Dictados"))
-        cards.addWidget(self._stat_card(f"{d['streak']}", "Racha (días)"))
+        cards.setSpacing(14)
+        cards.addWidget(StatCard("sparkles", f"{d['words']:,}", tr("insights.words"), accent=True))
+        cards.addWidget(StatCard("chart-column-big", f"{round(d['wpm'])}", tr("insights.wpm")))
+        cards.addWidget(StatCard("mic", f"{d['count']:,}", tr("insights.count")))
+        cards.addWidget(StatCard("history", f"{d['streak']}", tr("insights.streak")))
         self.body.addLayout(cards)
 
         # Per-app usage bars
-        sec = self._section("Uso por app")
+        sec = self._section(tr("insights.per_app"))
         per_app = d["per_app"]
         if not per_app:
-            empty = QLabel("Aún no hay dictados. Dicta algo con Ctrl+Alt.")
-            empty.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; border: none;")
-            sec.addWidget(empty)
+            sec.addWidget(EmptyState("mic", tr("insights.empty")))
         else:
             maxn = max(a["n"] for a in per_app) or 1
             for a in per_app:
                 row = QHBoxLayout()
-                row.setSpacing(10)
+                row.setSpacing(12)
                 name = QLabel(a["app"])
-                name.setFixedWidth(150)
-                name.setStyleSheet(f"color: {C.TEXT}; font-size: 12px; border: none;")
+                name.setFixedWidth(140)
+                name.setStyleSheet(f"color: {C.TEXT}; font-size: 12px; border: none; background: transparent;")
                 row.addWidget(name)
                 track = QFrame()
-                track.setFixedHeight(10)
-                track.setStyleSheet(f"background: {C.BG_INPUT}; border-radius: 5px;")
+                track.setFixedHeight(8)
+                track.setStyleSheet(f"background: {C.BG_INPUT}; border-radius: 4px;")
                 tl = QHBoxLayout(track)
                 tl.setContentsMargins(0, 0, 0, 0)
+                pct = max(6, round(100 * a["n"] / maxn))
                 fill = QFrame()
-                fill.setStyleSheet(f"background: {C.ACCENT}; border-radius: 5px;")
-                tl.addWidget(fill, max(1, round(100 * a["n"] / maxn)))
+                fill.setStyleSheet(f"background: {C.ACCENT}; border-radius: 4px;")
+                tl.addWidget(fill, pct)
                 spacer = QFrame()
                 spacer.setStyleSheet("background: transparent;")
-                tl.addWidget(spacer, max(0, 100 - round(100 * a["n"] / maxn)))
+                tl.addWidget(spacer, max(0, 100 - pct))
                 row.addWidget(track, 1)
                 cnt = QLabel(str(a["n"]))
-                cnt.setFixedWidth(40)
-                cnt.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; border: none;")
+                cnt.setFixedWidth(44)
+                cnt.setStyleSheet(f"color: {C.TEXT}; font-size: 13px; font-weight: 600; border: none; background: transparent;")
                 cnt.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 row.addWidget(cnt)
                 sec.addLayout(row)
 
-        # Activity strip — last 21 days
-        act = self._section("Actividad (últimos 21 días)")
+        # Activity heatmap — last 21 days
+        act = self._section(tr("insights.activity"))
         strip = QHBoxLayout()
-        strip.setSpacing(4)
+        strip.setSpacing(5)
         per_day = d["per_day"]
         from datetime import date, timedelta
         today = date.today()
@@ -1194,15 +1201,35 @@ class InsightsPage(QWidget):
         mx = max(vals) or 1
         for n in vals:
             sq = QFrame()
-            sq.setFixedSize(13, 13)
+            sq.setFixedSize(16, 16)
             if n == 0:
-                sq.setStyleSheet(f"background: {C.BG_INPUT}; border-radius: 3px;")
+                sq.setStyleSheet(f"background: {C.BG_INPUT}; border-radius: 4px;")
             else:
-                alpha = 90 + int(165 * min(1.0, n / mx))
-                sq.setStyleSheet(f"background: rgba(140,80,220,{alpha}); border-radius: 3px;")
+                alpha = round((0.35 + 0.65 * min(1.0, n / mx)), 2)
+                sq.setStyleSheet(f"background: rgba(140,80,220,{alpha}); border-radius: 4px;")
             strip.addWidget(sq)
         strip.addStretch()
         act.addLayout(strip)
+
+        # legend: less → more
+        legend = QHBoxLayout()
+        legend.setSpacing(5)
+        less = QLabel(tr("insights.legend_less"))
+        less.setStyleSheet(f"color: {C.TEXT_FAINT}; font-size: 11px; border: none; background: transparent;")
+        legend.addWidget(less)
+        for a in (0.0, 0.35, 0.6, 0.85, 1.0):
+            sq = QFrame()
+            sq.setFixedSize(12, 12)
+            if a == 0.0:
+                sq.setStyleSheet(f"background: {C.BG_INPUT}; border-radius: 3px;")
+            else:
+                sq.setStyleSheet(f"background: rgba(140,80,220,{a}); border-radius: 3px;")
+            legend.addWidget(sq)
+        more = QLabel(tr("insights.legend_more"))
+        more.setStyleSheet(f"color: {C.TEXT_FAINT}; font-size: 11px; border: none; background: transparent;")
+        legend.addWidget(more)
+        legend.addStretch()
+        act.addLayout(legend)
 
 
 class TransformsPage(QWidget):
@@ -1237,7 +1264,8 @@ class TransformsPage(QWidget):
             p = prompts[i] if i < len(prompts) else {"label": "", "prompt": ""}
             card = QFrame()
             card.setObjectName("card")
-            card.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 10px; }}")
+            card.setStyleSheet(f"#card {{ background: {C.BG_RAISED}; border: 1px solid {C.BORDER}; border-radius: 12px; }}")
+            elevate(card, "sm")
             cl = QVBoxLayout(card)
             cl.setContentsMargins(14, 12, 14, 12)
             cl.setSpacing(8)
@@ -1288,99 +1316,170 @@ class TransformsPage(QWidget):
 
 
 class HomePage(QWidget):
+    """A living dashboard: serif greeting hero, accent stat tiles, a 14-day
+    activity sparkline with streak, keycap shortcuts, and the latest dictation."""
+
     def __init__(self, db: TranscriptionDB):
         super().__init__()
         self.db = db
-        root = QVBoxLayout()
-        root.setContentsMargins(28, 22, 28, 22)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(30, 24, 30, 24)
         root.setSpacing(18)
 
-        hour = datetime.now().hour
-        greet = "Buenos días" if hour < 13 else ("Buenas tardes" if hour < 20 else "Buenas noches")
-        title = page_title(greet)
-        root.addWidget(title)
+        # --- greeting hero (serif brand voice) ---
+        self._greeting = display_title("", 34)
+        f = self._greeting.font()
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, -0.5)
+        self._greeting.setFont(f)
+        root.addWidget(self._greeting)
+        self._subtitle = QLabel("")
+        self._subtitle.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 13px;")
+        root.addWidget(self._subtitle)
 
-        shortcuts = QLabel(
-            "  <b>Ctrl+Alt</b> hold  ·  dictado normal<br>"
-            "  <b>Ctrl+Shift</b> hold  ·  Command Mode (transforma selección)<br>"
-            "  Doble-tap <b>Ctrl</b>  ·  hands-free (otra vez para parar)<br>"
-            "  <b>Cmd+Shift+H</b>  ·  abre este Hub"
-        )
-        shortcuts.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 13px; line-height: 1.7;")
-        shortcuts.setTextFormat(Qt.TextFormat.RichText)
-        root.addWidget(shortcuts)
-
-        # Stats row
+        # --- stat tiles ---
         self._stats_row = QHBoxLayout()
-        self._stats_row.setSpacing(10)
+        self._stats_row.setSpacing(14)
         root.addLayout(self._stats_row)
-        self._refresh_stats()
 
-        # Latest card
-        recent_lbl = QLabel("Último dictado")
-        recent_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; margin-top: 8px;")
-        root.addWidget(recent_lbl)
+        # --- activity + shortcuts ---
+        self._mid_row = QHBoxLayout()
+        self._mid_row.setSpacing(14)
+        root.addLayout(self._mid_row)
 
-        self._latest_container = QWidget()
-        lv = QVBoxLayout(self._latest_container)
-        lv.setContentsMargins(0, 0, 0, 0)
-        root.addWidget(self._latest_container)
-        self._refresh_latest()
+        # --- latest dictation ---
+        self._latest_host = QWidget()
+        lv = QVBoxLayout(self._latest_host)
+        lv.setContentsMargins(0, 6, 0, 0)
+        lv.setSpacing(10)
+        root.addWidget(self._latest_host)
 
         root.addStretch()
-        self.setLayout(root)
+        # Population happens in reload() (called on show / nav), matching the other
+        # pages — the preview harness and HubWindow.showEvent both drive it.
 
-    def _stat_card(self, value: str, label: str) -> QFrame:
-        f = QFrame()
-        f.setObjectName("card")
-        f.setStyleSheet(f"#card {{ background: {C.BG_CARD}; border: 1px solid {C.DIVIDER}; border-radius: 12px; }}")
-        lay = QVBoxLayout(f)
-        lay.setContentsMargins(18, 14, 18, 14)
-        lay.setSpacing(4)
-        v = QLabel(value)
-        v.setStyleSheet(f"color: {C.TEXT}; font-size: 26px; font-weight: 600;")
-        l = QLabel(label)
-        l.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 11px;")
-        lay.addWidget(v)
-        lay.addWidget(l)
-        return f
-
-    def _refresh_stats(self):
-        while self._stats_row.count():
-            item = self._stats_row.takeAt(0)
-            if item and item.widget():
-                item.widget().deleteLater()
-        rows = self.db.get_recent(limit=500)
-        total = len(rows)
-        words = sum(len((r.get("text") or "").split()) for r in rows)
-        today = 0
-        today_prefix = datetime.now().strftime("%Y-%m-%d")
-        for r in rows:
-            ts = r.get("created_at") or ""
-            if ts.startswith(today_prefix):
-                today += 1
-        self._stats_row.addWidget(self._stat_card(str(total), "transcripciones totales"))
-        self._stats_row.addWidget(self._stat_card(str(words), "palabras dictadas"))
-        self._stats_row.addWidget(self._stat_card(str(today), "hoy"))
-
-    def _refresh_latest(self):
-        lay = self._latest_container.layout()
-        while lay.count():
-            w = lay.takeAt(0).widget()
+    # ---- card scaffolding ----
+    @staticmethod
+    def _clear(layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
             if w is not None:
                 w.deleteLater()
-        rows = self.db.get_recent(limit=1)
-        if not rows:
-            e = QLabel("Aún no has dictado nada. Prueba Ctrl+Alt hold.")
-            e.setStyleSheet(f"color: {C.TEXT_FAINT}; font-size: 13px; padding: 20px; background: {C.BG_CARD}; border-radius: 10px; border: 1px solid {C.DIVIDER};")
-            lay.addWidget(e)
-            return
-        card = TranscriptionCard(rows[0])
-        lay.addWidget(card)
+            elif item.layout() is not None:
+                HomePage._clear(item.layout())
 
+    def _card(self) -> tuple[QFrame, QVBoxLayout]:
+        card = QFrame()
+        card.setObjectName("card")
+        card.setStyleSheet(
+            f"#card {{ background: {C.BG_RAISED}; border: 1px solid {C.BORDER};"
+            f" border-radius: 14px; }}"
+        )
+        inner = QVBoxLayout(card)
+        inner.setContentsMargins(18, 16, 18, 16)
+        inner.setSpacing(10)
+        elevate(card, "md")
+        return card, inner
+
+    def _card_header(self, text: str) -> QLabel:
+        lb = QLabel(text)
+        lb.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; font-weight: 600; background: transparent;")
+        return lb
+
+    # ---- data → widgets ----
     def reload(self):
-        self._refresh_stats()
-        self._refresh_latest()
+        d = self.db.insights()
+        rows = self.db.get_recent(limit=500)
+        total = len(rows)
+        words = int(d.get("words") or 0)
+        today_prefix = datetime.now().strftime("%Y-%m-%d")
+        today_rows = [r for r in rows if (r.get("created_at") or "").startswith(today_prefix)]
+        today = len(today_rows)
+        words_today = sum(len((r.get("text") or "").split()) for r in today_rows)
+        streak = int(d.get("streak") or 0)
+
+        # greeting + subtitle
+        hour = datetime.now().hour
+        gkey = "home.greet_morning" if hour < 13 else ("home.greet_afternoon" if hour < 20 else "home.greet_evening")
+        self._greeting.setText(tr(gkey))
+        self._subtitle.setText(tr("home.sub_today", words=words_today) if today else tr("home.sub_idle"))
+
+        # stat tiles (words = the accent focal metric)
+        self._clear(self._stats_row)
+        self._stats_row.addWidget(StatCard("history", f"{total:,}", tr("home.stat_total")))
+        self._stats_row.addWidget(StatCard("sparkles", f"{words:,}", tr("home.stat_words"), accent=True))
+        self._stats_row.addWidget(StatCard("mic", f"{today:,}", tr("home.stat_today")))
+
+        # activity + shortcuts row
+        self._clear(self._mid_row)
+        self._mid_row.addWidget(self._activity_card(d), 3)
+        self._mid_row.addWidget(self._shortcuts_card(), 2)
+
+        # latest dictation
+        self._clear(self._latest_host.layout())
+        self._latest_host.layout().addWidget(self._card_header(tr("home.latest")))
+        if rows:
+            card = TranscriptionCard(rows[0])
+            elevate(card, "sm")
+            self._latest_host.layout().addWidget(card)
+        else:
+            self._latest_host.layout().addWidget(
+                EmptyState("mic", tr("home.empty_title"), tr("home.empty_hint"))
+            )
+
+    def _activity_card(self, d: dict) -> QFrame:
+        from datetime import date, timedelta
+        card, inner = self._card()
+        inner.addWidget(self._card_header(tr("home.activity_14d")))
+
+        # streak line
+        streak = int(d.get("streak") or 0)
+        srow = QHBoxLayout()
+        srow.setSpacing(8)
+        srow.addWidget(serif_label(str(streak), 30, C.ACCENT))
+        if not streak:
+            streak_txt = tr("home.streak_none")
+        elif streak == 1:
+            streak_txt = tr("home.streak_day")
+        else:
+            streak_txt = tr("home.streak_days", n=streak)
+        lbl = QLabel(streak_txt)
+        lbl.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; background: transparent;")
+        srow.addWidget(lbl)
+        srow.addStretch()
+        inner.addLayout(srow)
+
+        # 14-day sparkline
+        per_day = d.get("per_day") or {}
+        today = date.today()
+        vals = [per_day.get((today - timedelta(days=i)).isoformat(), 0) for i in range(13, -1, -1)]
+        spark = Sparkline(vals)
+        spark.setMinimumHeight(52)
+        inner.addWidget(spark)
+        return card
+
+    def _shortcuts_card(self) -> QFrame:
+        card, inner = self._card()
+        inner.addWidget(self._card_header(tr("home.shortcuts")))
+        combos = [
+            (("Ctrl", "Alt"), tr("home.sc_dictate")),
+            (("Ctrl",), tr("home.sc_handsfree")),
+            (("Ctrl", "Shift"), tr("home.sc_command")),
+            (("⌘", "Shift", "H"), tr("home.sc_hub")),
+        ]
+        for keys, desc in combos:
+            r = QHBoxLayout()
+            r.setSpacing(10)
+            kc = keycaps(*keys)
+            kc.setFixedWidth(140)
+            r.addWidget(kc)
+            dl = QLabel(desc)
+            dl.setWordWrap(False)
+            dl.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; background: transparent;")
+            r.addWidget(dl, 1)
+            inner.addLayout(r)
+        inner.addStretch()
+        return card
 
 
 class HubWindow(QWidget):

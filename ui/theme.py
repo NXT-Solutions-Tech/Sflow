@@ -7,6 +7,21 @@ Design language: Wispr Flow — warm cream light (hero) + refined dark complemen
 one purple accent (``#8c50dc``, the brand/logo color), Instrument Serif display
 titles + Inter UI sans, standardized radii (8 / 12 / full).
 
+Color with intent (the accent earns its keep, it isn't decoration):
+- ``accent`` — the *primary* metric on a surface, in-context icons, the active
+  state. One focal accent per card, not every number.
+- ``accent_soft`` — filled circle behind an icon / metric badge.
+- ``success`` / ``warning`` / ``error`` — status only.
+- ``text_secondary`` / ``text_faint`` — genuinely secondary text, nothing else.
+
+Elevation: Qt QSS has no ``box-shadow``. Cards float via ``components.elevate()``
+(a ``QGraphicsDropShadowEffect`` tinted with the ``shadow`` token) over a
+``surface_raised`` fill — the fill alone keeps the hierarchy where a shadow can't
+render (offscreen previews, low-DPI).
+
+Type: the Instrument Serif display face is the brand voice — reserved for the
+greeting/section display headers (``role="display"`` / ``role="title"``), not body.
+
 The module keeps an *active scheme* (``light`` | ``dark``). Legacy code reads
 colors through the live ``C`` proxy (``C.BG``, ``C.ACCENT`` …) which resolves
 against whatever scheme is active — so existing inline stylesheets become
@@ -49,6 +64,9 @@ RADIUS_PILL = 999
 _DARK = {
     "bg": "#0f0f0f",
     "surface": "#181818",
+    "surface_raised": "#212121",   # elevated cards — one step above `surface` so
+                                   # they read as floating even where a drop shadow
+                                   # can't render (offscreen, low-DPI).
     "surface_alt": "#161616",      # sidebar / rails
     "surface_hover": "#242424",
     "input_bg": "#1e1e1e",
@@ -60,6 +78,8 @@ _DARK = {
     "accent": "#8c50dc",
     "accent_hover": "#7a3fc8",
     "accent_subtle": "rgba(140,80,220,0.16)",
+    "accent_soft": "rgba(140,80,220,0.22)",  # filled icon chips / metric badges
+    "shadow": "rgba(0,0,0,0.55)",            # drop-shadow color for elevate()
     "on_accent": "#ffffff",
     "success": "#4ec77d",
     "warning": "#ffa028",
@@ -69,6 +89,7 @@ _DARK = {
 _LIGHT = {
     "bg": "#faf7f2",               # warm cream (hero)
     "surface": "#ffffff",
+    "surface_raised": "#ffffff",   # already max-white; elevation comes from shadow
     "surface_alt": "#f3ede4",      # sidebar / rails (warm)
     "surface_hover": "#efe7db",
     "input_bg": "#ffffff",
@@ -80,6 +101,8 @@ _LIGHT = {
     "accent": "#8c50dc",
     "accent_hover": "#7a3fc8",
     "accent_subtle": "rgba(140,80,220,0.12)",
+    "accent_soft": "rgba(140,80,220,0.14)",  # filled icon chips / metric badges
+    "shadow": "rgba(60,50,90,0.16)",         # drop-shadow color for elevate()
     "on_accent": "#ffffff",
     "success": "#2ea866",
     "warning": "#c9770a",
@@ -166,6 +189,7 @@ _C_MAP = {
     "BG_ALT": "surface_alt",
     "BG_HOVER": "surface_hover",
     "BG_CARD": "surface",
+    "BG_RAISED": "surface_raised",
     "BG_INPUT": "input_bg",
     "TEXT": "text",
     "TEXT_DIM": "text_secondary",
@@ -173,6 +197,8 @@ _C_MAP = {
     "ACCENT": "accent",
     "ACCENT_HOVER": "accent_hover",
     "ACCENT_SUBTLE": "accent_subtle",
+    "ACCENT_SOFT": "accent_soft",
+    "SHADOW": "shadow",
     "DIVIDER": "divider",
     "BORDER": "border",
     "OK": "success",
