@@ -446,3 +446,42 @@ theme change, WCAG contrast on faint tokens, Hub keyboard/focus a11y, history fi
 - **Onboarding is never a gate.** If the wizard raises it's logged and the app starts —
   and it does *not* record `onboarding_seen_version`, so a one-off failure can't
   permanently skip onboarding.
+
+## Milestone "Bold re-skin + full Hub i18n" (2026-07-20, `feat/market-ready`)
+
+> An aesthetic pass (no new features) that gives the design system depth,
+> hierarchy and brand personality, then finishes the Hub's i18n so the app is
+> consistent in either language. Validated end to end with the offscreen preview
+> harness (`scripts/preview_surfaces.py`); 321 tests stay green.
+
+### Design system additions (`ui/theme.py` + `ui/components.py`)
+- **New tokens:** `surface_raised` (elevated card fill — one step above `surface` so
+  cards read as floating even where a shadow can't render), `accent_soft` (filled
+  icon/badge chips), `shadow` (drop-shadow color). All in `_DARK`/`_LIGHT` + the `C`
+  proxy (`BG_RAISED`, `ACCENT_SOFT`, `SHADOW`).
+- **`elevate(widget, level)`** — the ONLY way to cast a shadow in Qt (QSS has no
+  `box-shadow`): a themed `QGraphicsDropShadowEffect`. Pair with `surface_raised`.
+- **`serif_label()` / `display_title()`** — Instrument Serif brand voice. The family
+  MUST be set via inline stylesheet: Qt's global `QWidget{font-family:Inter}` rule
+  overrides `setFont()`, so a QFont-only serif silently renders as Inter. Letter-
+  spacing still needs QFont (QSS has none). `page_title()` now routes through this →
+  every page header is serif, not just the Home greeting.
+- **`StatCard`, `keycaps()`, `Sparkline` (custom-painted, theme-aware in
+  `paintEvent`), `EmptyState`, `icon_badge()`** — reused across Home/Insights/etc.
+
+### Gotchas learned here
+- **The serif-vs-global-QSS trap** (above) — the single most confusing symptom: the
+  serif "just doesn't apply." Always set brand font-family via stylesheet.
+- **Double-populate ghosts.** Pages that build widgets in BOTH `__init__` and
+  `reload()` leave `deleteLater()`'d widgets rendering at (0,0) for the next grab
+  (the preview harness calls `reload()` after construction; the app calls it from
+  `HubWindow.showEvent`/`_go`). Fix: populate ONLY in `reload()` (Home, Snippets now
+  match Insights/History). The composite `hub` grab populates the visible page by
+  hand since it never fires `showEvent`.
+- **`QGraphicsDropShadowEffect` renders fine offscreen** but is faint dark-on-dark;
+  `surface_raised` carries the hierarchy there.
+- **Full Hub i18n** (`core/i18n.py`): Settings/History/Snippets/Dictionary/Transforms
+  strings all go through `tr()` now. STT model combo labels are translated at display
+  via `model.<id>` keys (the data lives in `config.STT_MODELS`). Still Spanish: the
+  default Transforms prompts (user-editable seed data). The catalog-completeness test
+  forces every new key to ship both es + en.

@@ -45,9 +45,34 @@ The iteration that makes the offline promise true and the whole app honest.
 - Onboarding records "seen" only on completion (a mid-way close keeps the rescue).
 - Microphone status added to `permissions.snapshot()`.
 
+### Bold re-skin & full Hub i18n (design pass)
+- **Depth & elevation**: `components.elevate()` (a themed `QGraphicsDropShadowEffect`
+  — Qt QSS has no `box-shadow`) over a new `surface_raised` token, so cards float in
+  both themes. New tokens: `surface_raised`, `accent_soft`, `shadow`.
+- **Brand serif everywhere**: Instrument Serif (`components.serif_label`/
+  `display_title`) now carries every page title and the Home greeting — the display
+  voice was previously confined to onboarding. Family is set via inline stylesheet
+  because Qt's global `QWidget{font-family:Inter}` overrides `setFont()`.
+- **Reusable primitives** (`ui/components.py`): `StatCard` (icon + serif value +
+  accent focal), `keycaps()`, `Sparkline` (custom-painted, theme-aware), `EmptyState`,
+  `icon_badge()`.
+- **Home** is now a living dashboard: serif greeting + contextual subtitle, accent
+  stat tiles, a 14-day activity sparkline with streak, keycap shortcuts, latest/empty.
+- **Insights** shares `StatCard`s, elevated sections, real-scale usage bars, and a
+  heatmap with a less→more legend.
+- **Settings** drops the dated `QGroupBox` (title notched into the border) for clean
+  elevated cards with top headers.
+- **Sidebar** active item gets accent identity (tint + purple text/icon).
+- **Full Hub i18n**: every visible string on Settings, History, Snippets, Dictionary
+  and Transforms now routes through `tr()` (es/en) — switching the app language no
+  longer leaves a half-translated UI. ~70 new catalog keys; the completeness test
+  keeps both languages in lockstep.
+
 ### Deferred (see ROADMAP)
 Developer ID signing + notarization + DMG + Sparkle auto-update; streaming STT /
 live preview; `raw_text`/`enhanced_text` + undo-AI; FTS5 search; opt-in telemetry.
+Not yet localized: the default Transforms prompts (user-editable seed data in
+`config.py`).
 
 ## Earlier
 
