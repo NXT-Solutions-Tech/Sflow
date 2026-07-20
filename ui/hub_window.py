@@ -84,7 +84,7 @@ class EditTranscriptDialog(QDialog):
         root.setContentsMargins(18, 16, 18, 16)
         root.setSpacing(10)
 
-        lbl = QLabel("Corrige el texto. SFlow sugiere automáticamente palabras nuevas (nombres, jerga) para el diccionario.")
+        lbl = QLabel(tr("editdlg.hint"))
         lbl.setWordWrap(True)
         lbl.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
         root.addWidget(lbl)
@@ -95,11 +95,11 @@ class EditTranscriptDialog(QDialog):
 
         row = QHBoxLayout()
         row.addStretch()
-        cancel = secondary_button("Cancelar")
+        cancel = secondary_button(tr("common.cancel"))
         cancel.clicked.connect(self.reject)
         row.addWidget(cancel)
 
-        save = primary_button("Guardar")
+        save = primary_button(tr("common.save"))
         save.setDefault(True)
         save.clicked.connect(self._save)
         row.addWidget(save)
@@ -308,14 +308,14 @@ class HistoryPage(QWidget):
         title = page_title(tr("page.history"))
         root.addWidget(title)
 
-        sub = QLabel("Tus transcripciones recientes. Click en una para expandir, ⋮ para acciones.")
+        sub = QLabel(tr("history.sub"))
         sub.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
         root.addWidget(sub)
 
         # Search + refresh
         row = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Buscar transcripciones…")
+        self.search.setPlaceholderText(tr("history.search"))
         self.search.setClearButtonEnabled(True)
         self.search.addAction(
             icons.icon("search", color=C.TEXT_FAINT, size=16),
@@ -416,9 +416,7 @@ class HistoryPage(QWidget):
             rows = [r for r in rows if q in (r.get("text") or "").lower()]
 
         if not rows:
-            empty = QLabel("Nada por aquí. Dicta algo presionando Ctrl+Alt.")
-            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty.setStyleSheet(f"color: {C.TEXT_FAINT}; padding: 40px; font-size: 13px;")
+            empty = EmptyState("history", tr("history.empty"), tr("history.empty_hint"))
             self._list_layout.insertWidget(0, empty)
             return
 
@@ -458,7 +456,7 @@ class HistoryPage(QWidget):
         from PyQt6.QtCore import QMetaObject, Qt as _Qt
         row = self.db.get(row_id)
         if not row or not row.get("audio_path") or not os.path.exists(row["audio_path"]):
-            QMessageBox.warning(self, "Sin audio", "Este dictado no tiene WAV asociado.")
+            QMessageBox.warning(self, tr("history.no_audio_title"), tr("history.no_audio_body"))
             return
 
         from core.transcriber import Transcriber
@@ -466,7 +464,7 @@ class HistoryPage(QWidget):
         path = row["audio_path"]
 
         # Show feedback toast-style label at top of list
-        busy = QLabel("Re-transcribiendo…")
+        busy = QLabel(tr("history.retranscribing"))
         busy.setStyleSheet(f"color: {C.ACCENT}; padding: 8px; font-size: 12px;")
         self._list_layout.insertWidget(0, busy)
 
@@ -495,7 +493,7 @@ class DictionaryPage(QWidget):
         title = page_title(tr("page.dictionary"))
         root.addWidget(title)
 
-        sub = QLabel("Una palabra o frase por línea (pista de vocabulario para Whisper: nombres, jerga, términos técnicos).\nPara sustituciones automáticas de texto usa una flecha:  btw -> by the way")
+        sub = QLabel(tr("dict.sub"))
         sub.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
         sub.setWordWrap(True)
         root.addWidget(sub)
@@ -514,7 +512,7 @@ class DictionaryPage(QWidget):
 
         row = QHBoxLayout()
         row.addStretch()
-        save = primary_button("Guardar")
+        save = primary_button(tr("common.save"))
         save.clicked.connect(self._save)
         row.addWidget(save)
         root.addLayout(row)
@@ -540,7 +538,7 @@ class DictionaryPage(QWidget):
             with open(DICTIONARY_PATH, "w") as f:
                 f.write(self.editor.toPlainText())
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"No se pudo guardar: {e}")
+            QMessageBox.warning(self, tr("common.error"), tr("dict.save_error", err=e))
 
 
 class SnippetsPage(QWidget):
@@ -554,10 +552,7 @@ class SnippetsPage(QWidget):
         title = page_title(tr("page.snippets"))
         root.addWidget(title)
 
-        sub = QLabel(
-            'Atajos de voz. Cuando dictes el trigger, SFlow lo reemplaza por la expansión. '
-            'Ejemplo: di "mi correo" y se pega tu email.'
-        )
+        sub = QLabel(tr("snippets.sub"))
         sub.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
         sub.setWordWrap(True)
         root.addWidget(sub)
@@ -571,22 +566,22 @@ class SnippetsPage(QWidget):
         fl.setContentsMargins(18, 16, 18, 16)
         fl.setSpacing(8)
 
-        lbl = QLabel("Agregar snippet")
+        lbl = QLabel(tr("snippets.add_header"))
         lbl.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px; font-weight: 600; background: transparent;")
         fl.addWidget(lbl)
 
         self.trigger_input = QLineEdit()
-        self.trigger_input.setPlaceholderText("trigger (ej: mi correo)")
+        self.trigger_input.setPlaceholderText(tr("snippets.trigger_placeholder"))
         fl.addWidget(self.trigger_input)
 
         self.expansion_input = QPlainTextEdit()
-        self.expansion_input.setPlaceholderText("expansión (lo que se pega cuando digas el trigger)")
+        self.expansion_input.setPlaceholderText(tr("snippets.expansion_placeholder"))
         self.expansion_input.setMaximumHeight(80)
         fl.addWidget(self.expansion_input)
 
         row = QHBoxLayout()
         row.addStretch()
-        add_btn = primary_button("Agregar")
+        add_btn = primary_button(tr("common.add"))
         add_btn.clicked.connect(self._add)
         row.addWidget(add_btn)
         fl.addLayout(row)
@@ -614,7 +609,7 @@ class SnippetsPage(QWidget):
         t = self.trigger_input.text().strip()
         e = self.expansion_input.toPlainText().strip()
         if not t or not e:
-            QMessageBox.warning(self, "Campos vacíos", "Trigger y expansión son requeridos.")
+            QMessageBox.warning(self, tr("snippets.empty_fields_title"), tr("snippets.empty_fields_body"))
             return
         try:
             self.db.add(t, e)
@@ -622,7 +617,7 @@ class SnippetsPage(QWidget):
             self.expansion_input.clear()
             self.reload()
         except Exception as err:
-            QMessageBox.warning(self, "Error", str(err))
+            QMessageBox.warning(self, tr("common.error"), str(err))
 
     def reload(self):
         while self._list_layout.count() > 1:
@@ -634,11 +629,7 @@ class SnippetsPage(QWidget):
 
         rows = self.db.list_all()
         if not rows:
-            empty = EmptyState(
-                "sparkles",
-                "No tienes snippets aún",
-                'Agrega uno arriba: di el trigger y SFlow pega la expansión.',
-            )
+            empty = EmptyState("sparkles", tr("snippets.empty_title"), tr("snippets.empty_hint"))
             self._list_layout.insertWidget(0, empty)
             return
 
@@ -660,7 +651,7 @@ class SnippetsPage(QWidget):
         head.addWidget(trig)
 
         if s.get("usage_count", 0) > 0:
-            usage = QLabel(f"· usado {s['usage_count']}×")
+            usage = QLabel(tr("snippets.used", n=s["usage_count"]))
             usage.setStyleSheet(f"color: {C.TEXT_FAINT}; font-size: 11px;")
             head.addWidget(usage)
 
@@ -726,8 +717,8 @@ class SettingsPage(QWidget):
             sa.setStyleSheet("QScrollArea { background: transparent; border: none; }")
             sa.setWidget(inner_widget)
             return sa
-        tabs.addTab(_scrolled(_general), "General")
-        tabs.addTab(_scrolled(_system), "System")
+        tabs.addTab(_scrolled(_general), tr("settings.tab_general"))
+        tabs.addTab(_scrolled(_system), tr("settings.tab_system"))
         root.addWidget(tabs, 1)
 
         def group(name, target) -> QVBoxLayout:
@@ -787,11 +778,13 @@ class SettingsPage(QWidget):
             return lb
 
         # ============ GENERAL ============
-        tl = group("Transcripción", gen)
-        tl.addWidget(dim("Modelo de transcripción"))
+        tl = group(tr("settings.sec_transcription"), gen)
+        tl.addWidget(dim(tr("settings.model_label")))
         self.model_combo = QComboBox()
         for m in STT_MODELS:
-            self.model_combo.addItem(m["label"], m["id"])
+            key = f"model.{m['id']}"
+            label = tr(key)
+            self.model_combo.addItem(label if label != key else m["label"], m["id"])
         self.model_combo.setCurrentIndex(max(0, self.model_combo.findData(get_setting("stt_model", "whisper-turbo-local"))))
         tl.addWidget(self.model_combo)
 
@@ -809,11 +802,11 @@ class SettingsPage(QWidget):
         self.model_combo.currentIndexChanged.connect(lambda _i: self._refresh_model_dl())
         self._refresh_model_dl()
 
-        tl.addWidget(dim("Idioma del dictado"))
+        tl.addWidget(dim(tr("settings.dictlang_label")))
         self.lang_combo = QComboBox()
-        self.lang_combo.addItem("Auto — detecta ES/EN automáticamente", "auto")
-        self.lang_combo.addItem("Español", "es")
-        self.lang_combo.addItem("English", "en")
+        self.lang_combo.addItem(tr("settings.dl_auto"), "auto")
+        self.lang_combo.addItem(tr("settings.dl_es"), "es")
+        self.lang_combo.addItem(tr("settings.dl_en"), "en")
         self.lang_combo.setCurrentIndex(max(0, self.lang_combo.findData(get_setting("stt_language", "auto"))))
         tl.addWidget(self.lang_combo)
 
@@ -827,111 +820,111 @@ class SettingsPage(QWidget):
         tl.addWidget(self.applang_combo)
         tl.addWidget(dim(tr("settings.lang_hint")))
 
-        tl.addWidget(dim("Micrófono / entrada de audio"))
+        tl.addWidget(dim(tr("settings.mic_label")))
         self.mic_combo = QComboBox()
-        self.mic_combo.addItem("Predeterminado del sistema", "")
+        self.mic_combo.addItem(tr("settings.mic_default"), "")
         for d in list_input_devices():
             self.mic_combo.addItem(d["name"], d["name"])
         self.mic_combo.setCurrentIndex(max(0, self.mic_combo.findData(get_setting("input_device", "") or "")))
         tl.addWidget(self.mic_combo)
 
-        al = group("Auto Cleanup", gen)
-        al.addWidget(dim("Nivel de limpieza"))
+        al = group(tr("settings.sec_cleanup"), gen)
+        al.addWidget(dim(tr("settings.cleanup_label")))
         self.cleanup_combo = QComboBox()
-        self.cleanup_combo.addItem("None — sin limpieza, texto verbatim", "none")
-        self.cleanup_combo.addItem("Light — muletillas + puntuación", "light")
-        self.cleanup_combo.addItem("Medium — claridad + concisión", "medium")
+        self.cleanup_combo.addItem(tr("settings.cl_none"), "none")
+        self.cleanup_combo.addItem(tr("settings.cl_light"), "light")
+        self.cleanup_combo.addItem(tr("settings.cl_medium"), "medium")
         self.cleanup_combo.setCurrentIndex(max(0, self.cleanup_combo.findData(get_setting("auto_cleanup_level", "none"))))
         al.addWidget(self.cleanup_combo)
 
-        al.addWidget(dim("Proveedor de limpieza"))
+        al.addWidget(dim(tr("settings.provider_label")))
         self.provider_combo = QComboBox()
-        self.provider_combo.addItem("Groq · Llama (nube)", "groq")
-        self.provider_combo.addItem("OpenRouter · GLM (nube)", "openrouter")
-        self.provider_combo.addItem("Local · Qwen (offline)", "local")
+        self.provider_combo.addItem(tr("settings.pr_groq"), "groq")
+        self.provider_combo.addItem(tr("settings.pr_openrouter"), "openrouter")
+        self.provider_combo.addItem(tr("settings.pr_local"), "local")
         self.provider_combo.setCurrentIndex(max(0, self.provider_combo.findData(get_setting("llm_cleanup_provider", "groq"))))
         al.addWidget(self.provider_combo)
 
-        self.context = Switch("Adaptar tono según la app activa (Slack casual, Gmail formal…)")
+        self.context = Switch(tr("settings.sw_tone"))
         self.context.setChecked(get_setting("context_aware_tone", True))
         al.addWidget(self.context)
 
-        xl = group("Texto", gen)
-        self.commands = Switch("Comandos de voz (\"nueva línea\", \"punto y aparte\", \"coma\")")
+        xl = group(tr("settings.sec_text"), gen)
+        self.commands = Switch(tr("settings.sw_commands"))
         self.commands.setChecked(get_setting("smart_commands_enabled", True))
         xl.addWidget(self.commands)
-        self.dict_toggle = Switch("Usar diccionario personal como vocabulario")
+        self.dict_toggle = Switch(tr("settings.sw_dict"))
         self.dict_toggle.setChecked(get_setting("personal_dictionary_enabled", True))
         xl.addWidget(self.dict_toggle)
-        self.subs_toggle = Switch("Sustituciones de texto (btw → by the way)")
+        self.subs_toggle = Switch(tr("settings.sw_subs"))
         self.subs_toggle.setChecked(get_setting("text_substitutions_enabled", True))
         xl.addWidget(self.subs_toggle)
 
         # ============ SYSTEM ============
-        ap = group("Apariencia", sysl)
-        ap.addWidget(dim("Tema"))
+        ap = group(tr("settings.sec_appearance"), sysl)
+        ap.addWidget(dim(tr("settings.theme_label")))
         self.theme_combo = QComboBox()
-        self.theme_combo.addItem("Automático — sigue el sistema", "auto")
-        self.theme_combo.addItem("Claro", "light")
-        self.theme_combo.addItem("Oscuro", "dark")
+        self.theme_combo.addItem(tr("settings.th_auto"), "auto")
+        self.theme_combo.addItem(tr("settings.th_light"), "light")
+        self.theme_combo.addItem(tr("settings.th_dark"), "dark")
         self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(get_setting("theme", "auto"))))
         ap.addWidget(self.theme_combo)
 
-        pl = group("Inserción de texto", sysl)
-        pl.addWidget(dim("Método de pegado"))
+        pl = group(tr("settings.sec_paste"), sysl)
+        pl.addWidget(dim(tr("settings.paste_label")))
         self.paste_combo = QComboBox()
-        self.paste_combo.addItem("Keystroke — no toca tu portapapeles (recomendado)", "keystroke")
-        self.paste_combo.addItem("Clipboard + Cmd+V — sobrescribe el portapapeles", "clipboard")
+        self.paste_combo.addItem(tr("settings.pb_keystroke"), "keystroke")
+        self.paste_combo.addItem(tr("settings.pb_clipboard"), "clipboard")
         self.paste_combo.setCurrentIndex(0 if get_setting("paste_backend", "keystroke") == "keystroke" else 1)
         pl.addWidget(self.paste_combo)
-        self.streaming = Switch("Streaming paste (typing palabra-por-palabra)")
+        self.streaming = Switch(tr("settings.sw_streaming"))
         self.streaming.setChecked(get_setting("streaming_paste_enabled", False))
         pl.addWidget(self.streaming)
 
-        snd = group("Sonido", sysl)
-        self.sound_start = Switch("Sonido al empezar a dictar")
+        snd = group(tr("settings.sec_sound"), sysl)
+        self.sound_start = Switch(tr("settings.sw_sound_start"))
         self.sound_start.setChecked(get_setting("sound_on_start", False))
         snd.addWidget(self.sound_start)
-        self.sound_done = Switch("Sonido al terminar")
+        self.sound_done = Switch(tr("settings.sw_sound_done"))
         self.sound_done.setChecked(get_setting("sound_on_done", False))
         snd.addWidget(self.sound_done)
 
-        bl = group("Comportamiento", sysl)
-        self.command_mode = Switch("Command Mode (Ctrl+Shift hold → transforma selección con voz · el audio se transcribe local; la transformación usa el proveedor de limpieza configurado)")
+        bl = group(tr("settings.sec_behavior"), sysl)
+        self.command_mode = Switch(tr("settings.sw_command_mode"))
         self.command_mode.setChecked(get_setting("command_mode_enabled", False))
         bl.addWidget(self.command_mode)
-        self.save_audio = Switch("Guardar audio para re-transcribir (historial)")
+        self.save_audio = Switch(tr("settings.sw_save_audio"))
         self.save_audio.setChecked(get_setting("save_audio_for_retry", True))
         bl.addWidget(self.save_audio)
-        self.glass = Switch("Liquid Glass en la pill (experimental — macOS 26+)")
+        self.glass = Switch(tr("settings.sw_glass"))
         self.glass.setChecked(get_setting("liquid_glass_enabled", False))
         bl.addWidget(self.glass)
 
-        hl = group("Hotkey de mouse (opcional)", sysl)
+        hl = group(tr("settings.sec_mouse"), sysl)
         self.mouse = QComboBox()
-        self.mouse.addItem("Ninguno", "")
-        self.mouse.addItem("Click medio (rueda)", "middle")
-        self.mouse.addItem("Botón lateral 1 (Mouse4)", "x1")
-        self.mouse.addItem("Botón lateral 2 (Mouse5)", "x2")
+        self.mouse.addItem(tr("settings.ms_none"), "")
+        self.mouse.addItem(tr("settings.ms_middle"), "middle")
+        self.mouse.addItem(tr("settings.ms_x1"), "x1")
+        self.mouse.addItem(tr("settings.ms_x2"), "x2")
         self.mouse.setCurrentIndex(max(0, self.mouse.findData(get_setting("mouse_button_hotkey") or "")))
         hl.addWidget(self.mouse)
 
-        kl = group("API Keys · macOS Keychain", sysl)
-        kl.addWidget(dim("Groq API Key (STT en la nube + limpieza Llama)"))
+        kl = group(tr("settings.sec_keys"), sysl)
+        kl.addWidget(dim(tr("settings.groq_key_label")))
         self.groq_key = QLineEdit(); self.groq_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.groq_key.setPlaceholderText(self._key_status("GROQ_API_KEY"))
         kl.addWidget(self.groq_key)
-        kl.addWidget(dim("OpenRouter API Key (limpieza GLM)"))
+        kl.addWidget(dim(tr("settings.or_key_label")))
         self.or_key = QLineEdit(); self.or_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.or_key.setPlaceholderText(self._key_status("OPENROUTER_API_KEY"))
         kl.addWidget(self.or_key)
-        kl.addWidget(dim("Se guardan en el Keychain de macOS. Deja en blanco para conservar la actual."))
+        kl.addWidget(dim(tr("settings.keys_hint")))
 
         # Save bar
         bar = QHBoxLayout()
         bar.addStretch()
 
-        relaunch_btn = secondary_button("Reiniciar SFlow")
+        relaunch_btn = secondary_button(tr("tray.relaunch"))
         relaunch_btn.clicked.connect(self._relaunch)
         bar.addWidget(relaunch_btn)
 
@@ -950,9 +943,9 @@ class SettingsPage(QWidget):
     def _key_status(name: str) -> str:
         """Placeholder text reflecting where the key lives — never the value."""
         return {
-            "keychain": "•••••••• (guardada en Keychain)",
-            "env": "•••••••• (desde .env)",
-            "none": "no configurada",
+            "keychain": tr("settings.ks_keychain"),
+            "env": tr("settings.ks_env"),
+            "none": tr("settings.ks_none"),
         }[key_source(name)]
 
     def _restart_snapshot(self) -> tuple:
@@ -985,8 +978,8 @@ class SettingsPage(QWidget):
 
     def _relaunch(self):
         confirm = QMessageBox.question(
-            self, "Reiniciar SFlow",
-            "Se cerrará y abrirá una nueva instancia. ¿Continuar?",
+            self, tr("tray.relaunch"),
+            tr("settings.relaunch_body"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
@@ -1241,9 +1234,9 @@ class TransformsPage(QWidget):
         outer.setContentsMargins(28, 22, 28, 16)
         outer.setSpacing(12)
 
-        title = page_title("Transforms")
+        title = page_title(tr("page.transforms"))
         outer.addWidget(title)
-        sub = QLabel("Reescrituras con IA sobre el texto seleccionado. Selecciona texto y aplica con ⌥+1…8.")
+        sub = QLabel(tr("transforms.sub"))
         sub.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
         sub.setWordWrap(True)
         outer.addWidget(sub)
@@ -1275,11 +1268,11 @@ class TransformsPage(QWidget):
                                 f" border-radius: 6px; padding: 3px 9px; font-size: 12px; font-weight: 600;")
             head.addWidget(badge)
             le = QLineEdit(p.get("label", ""))
-            le.setPlaceholderText("Nombre del transform")
+            le.setPlaceholderText(tr("transforms.name_placeholder"))
             head.addWidget(le, 1)
             cl.addLayout(head)
             pe = QPlainTextEdit(p.get("prompt", ""))
-            pe.setPlaceholderText("Instrucción para el LLM (ej: Reescribe este texto de forma más concisa…)")
+            pe.setPlaceholderText(tr("transforms.prompt_placeholder"))
             pe.setFixedHeight(60)
             cl.addWidget(pe)
             il.addWidget(card)
@@ -1289,11 +1282,11 @@ class TransformsPage(QWidget):
         outer.addWidget(scroll, 1)
 
         bar = QHBoxLayout()
-        reset = secondary_button("Restaurar predeterminados")
+        reset = secondary_button(tr("transforms.reset"))
         reset.clicked.connect(self._reset)
         bar.addWidget(reset)
         bar.addStretch()
-        save = primary_button("Guardar transforms")
+        save = primary_button(tr("transforms.save"))
         save.clicked.connect(self._save)
         bar.addWidget(save)
         outer.addLayout(bar)
@@ -1304,7 +1297,7 @@ class TransformsPage(QWidget):
             for i, (le, pe) in enumerate(self._rows)
         ]
         set_setting("transform_prompts", prompts)
-        QMessageBox.information(self, "Guardado", "Transforms actualizados. ⌥+1…8 usan los nuevos prompts.")
+        QMessageBox.information(self, tr("transforms.saved_title"), tr("transforms.saved_body"))
 
     def _reset(self):
         from config import _default_settings
@@ -1529,7 +1522,7 @@ class HubWindow(QWidget):
         self.btn_hist = SidebarButton("history", tr("nav.history"))
         self.btn_dict = SidebarButton("dictionary", tr("nav.dictionary"))
         self.btn_snip = SidebarButton("snippets", tr("nav.snippets"))
-        self.btn_trans = SidebarButton("transforms", "Transforms")
+        self.btn_trans = SidebarButton("transforms", tr("nav.transforms"))
         self.btn_set = SidebarButton("settings", tr("nav.settings"))
         for b in (self.btn_home, self.btn_insights, self.btn_hist, self.btn_dict, self.btn_snip, self.btn_trans, self.btn_set):
             sl.addWidget(b)
