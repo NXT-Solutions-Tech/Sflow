@@ -88,7 +88,7 @@ The core product loop and the main AI/desktop flows are implemented. Remaining r
 
 ## Attribution and scope
 
-This repository is the current NXT-Solutions-Tech SFlow iteration. It evolved from an existing voice-dictation codebase; commit history and file-level attribution remain the source of truth for individual contributions. The repository carries an MIT license whose current copyright notice names Daniel Carreon; preserve that notice and review attribution before any public release. The project is presented here as evidence of hands-on AI application development, desktop integration and engineering judgment—not as a claim that every upstream component was written from scratch.
+This repository is the current NXT-Solutions-Tech SFlow iteration. It evolved from an existing voice-dictation codebase; commit history and file-level attribution remain the source of truth for individual contributions. The repository carries an MIT license whose current copyright notice names Daniel Carreon; preserve that notice and review attribution before wider redistribution or packaged release. The project is presented here as evidence of hands-on AI application development, desktop integration and engineering judgment—not as a claim that every upstream component was written from scratch.
 
 ## Related work
 
