@@ -4,7 +4,7 @@
 
 SFlow is a Python/PyQt6 macOS application that turns speech into text in any focused app. It combines global hotkeys, a floating recording UI, selectable transcription backends, optional AI cleanup, system-wide paste, and a local SQLite history.
 
-The repository is currently private while the project is being reviewed for licensing, dependency and release readiness. The code and documentation are still useful as a technical case study: they show how I prototype AI-assisted desktop software and make model-backed behavior testable and fail-safe.
+The repository is public as a technical case study. It is still an evolving project, so licensing, dependency and packaging review remain part of release readiness. The code and documentation show how I prototype AI-assisted desktop software and make model-backed behavior testable and fail-safe.
 
 ## What an AI or technical reviewer can verify
 
